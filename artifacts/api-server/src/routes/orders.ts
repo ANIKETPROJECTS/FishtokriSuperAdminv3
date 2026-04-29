@@ -719,6 +719,7 @@ router.put("/:id", async (req: ScopedRequest, res) => {
       scheduleType, deliveryDate, timeslotId, timeslotLabel, timeslotStart, timeslotEnd,
       couponId, couponCode, couponTitle, couponIds, couponCodes, coupons,
       subtotal, discount, slotCharge, total,
+      cancellationReason,
     } = req.body;
     if (status !== undefined && !VALID_ORDER_STATUSES.has(String(status))) {
       res.status(400).json({ error: "ValidationError", message: `Invalid order status: ${status}` });
@@ -756,6 +757,9 @@ router.put("/:id", async (req: ScopedRequest, res) => {
     if (discount !== undefined) update.discount = Number(discount) || 0;
     if (slotCharge !== undefined) update.slotCharge = Number(slotCharge) || 0;
     if (total !== undefined) update.total = Number(total) || 0;
+    if (cancellationReason !== undefined) {
+      update.cancellationReason = cancellationReason ? String(cancellationReason).trim().slice(0, 500) : "";
+    }
     if (Array.isArray(items)) {
       update.items = items.map((it: any) => ({
         productId: it?.productId ? String(it.productId) : undefined,

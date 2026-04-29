@@ -109,6 +109,40 @@ function SolidStatusBadge({ status, deliveryType }: { status: string; deliveryTy
   );
 }
 
+function PaymentBadge({ order }: { order: any }) {
+  // Detect mode from paymentMode or first payment entry; fallback to COD.
+  const rawMode = String(
+    order?.paymentMode ||
+    (Array.isArray(order?.payments) && order.payments[0]?.mode) ||
+    ""
+  ).toLowerCase().trim();
+  const mode = rawMode === "upi" ? "upi"
+    : rawMode === "card" ? "card"
+    : rawMode === "wallet" ? "wallet"
+    : (rawMode === "cash" || rawMode === "cod" || rawMode === "") ? "cod"
+    : rawMode;
+  const cfg: Record<string, { label: string; cls: string; Icon: any }> = {
+    cod: { label: "COD", cls: "bg-amber-50 text-amber-700 border-amber-200", Icon: Banknote },
+    upi: { label: "UPI", cls: "bg-violet-50 text-violet-700 border-violet-200", Icon: Smartphone },
+    card: { label: "Card", cls: "bg-blue-50 text-blue-700 border-blue-200", Icon: CreditCard },
+    wallet: { label: "Wallet", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", Icon: Wallet },
+  };
+  const info = cfg[mode] ?? { label: mode.toUpperCase() || "—", cls: "bg-gray-50 text-black border-gray-200", Icon: Wallet };
+  const Icon = info.Icon;
+  const paid = order?.paymentStatus === "paid";
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className={`inline-flex items-center gap-1 w-fit text-[11px] font-semibold px-2 py-0.5 rounded-full border ${info.cls}`}>
+        <Icon className="w-3 h-3" />
+        {info.label}
+      </span>
+      {paid && (
+        <span className="inline-flex items-center w-fit text-[10px] font-semibold text-emerald-700">Paid</span>
+      )}
+    </div>
+  );
+}
+
 function formatTime12(t: string): string {
   const m = String(t).match(/(\d{1,2}):(\d{2})/);
   if (!m) return String(t);
@@ -630,6 +664,12 @@ export default function Orders() {
   // Delete order
   const [deletingOrder, setDeletingOrder] = useState<any>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  // Accept / Reject order
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [rejectingOrder, setRejectingOrder] = useState<any>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [confirmingReject, setConfirmingReject] = useState(false);
 
   // Create order
   // Create-order open state is driven by URL (/orders/new)
@@ -1390,6 +1430,47 @@ export default function Orders() {
     }
   };
 
+  const acceptOrder = async (order: any) => {
+    const orderId = String(order._id);
+    setAcceptingId(orderId);
+    try {
+      await apiFetch(`/api/orders/${orderId}`, { method: "PUT", body: JSON.stringify({ status: "confirmed" }) });
+      toast({ title: "Order accepted", description: "Status set to Confirmed." });
+      setOrders((prev) => prev.map((o) => String(o._id) === orderId ? { ...o, status: "confirmed" } : o));
+      loadStats();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setAcceptingId(null);
+    }
+  };
+
+  const submitReject = async () => {
+    if (!rejectingOrder) return;
+    const reason = rejectReason.trim();
+    if (!reason) {
+      toast({ title: "Reason required", description: "Please enter a reason for cancellation.", variant: "destructive" });
+      return;
+    }
+    const orderId = String(rejectingOrder._id);
+    setConfirmingReject(true);
+    try {
+      await apiFetch(`/api/orders/${orderId}`, {
+        method: "PUT",
+        body: JSON.stringify({ status: "cancelled", cancellationReason: reason }),
+      });
+      toast({ title: "Order rejected", description: "Order has been cancelled." });
+      setOrders((prev) => prev.map((o) => String(o._id) === orderId ? { ...o, status: "cancelled", cancellationReason: reason } : o));
+      setRejectingOrder(null);
+      setRejectReason("");
+      loadStats();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setConfirmingReject(false);
+    }
+  };
+
   const inlineAssign = async (orderId: string, personId: string) => {
     setInlineAssigningId(orderId);
     try {
@@ -1870,6 +1951,7 @@ export default function Orders() {
                   <th className="px-3 py-3 text-left">Customer</th>
                   <th className="px-3 py-3 text-left">Items</th>
                   <th className="px-3 py-3 text-left">Total</th>
+                  <th className="px-3 py-3 text-left">Payment</th>
                   <th className="px-3 py-3 text-left">Sub Hub</th>
                   <th className="px-3 py-3 text-left">Time Slot</th>
                   <th className="px-3 py-3 text-left">Location</th>
@@ -1908,6 +1990,7 @@ export default function Orders() {
                         <span className="font-bold text-black">{formatRupees(total)}</span>
                         {o.instantDeliveryCharge ? <p className="text-xs text-orange-600">+{formatRupees(o.instantDeliveryCharge)} delivery</p> : null}
                       </td>
+                      <td className="px-3 py-3"><PaymentBadge order={o} /></td>
                       <td className="px-3 py-3">
                         {o.subHubName
                           ? <span className="text-xs font-medium text-black">{o.subHubName}</span>
@@ -1929,7 +2012,36 @@ export default function Orders() {
                       </td>
                       <td className="px-4 py-3"><SolidStatusBadge status={o.status} deliveryType={o.deliveryType} /></td>
                       <td className="px-4 py-3">
-                        {o.deliveryType === "takeaway" ? (
+                        {o.status === "pending" ? (
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              disabled={acceptingId === String(o._id)}
+                              onClick={() => acceptOrder(o)}
+                              className="h-7 px-2.5 gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                              <Check className="w-3 h-3" /> Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={acceptingId === String(o._id)}
+                              onClick={() => { setRejectingOrder(o); setRejectReason(""); }}
+                              className="h-7 px-2.5 gap-1 text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                            >
+                              <X className="w-3 h-3" /> Reject
+                            </Button>
+                          </div>
+                        ) : o.status === "cancelled" ? (
+                          <div className="flex flex-col">
+                            <span className="text-xs font-semibold text-red-600">Rejected</span>
+                            {o.cancellationReason && (
+                              <span className="text-[11px] text-black truncate max-w-[180px]" title={o.cancellationReason}>
+                                {o.cancellationReason}
+                              </span>
+                            )}
+                          </div>
+                        ) : o.deliveryType === "takeaway" ? (
                           <span className="text-xs text-gray-400 italic">Not required</span>
                         ) : deliveryPersons.length > 0 ? (
                           <InlineDeliverySelect
@@ -2143,6 +2255,51 @@ export default function Orders() {
                   className="bg-red-600 hover:bg-red-700 h-9 text-white"
                 >
                   {confirmingDelete ? "Deleting..." : "Delete Order"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Order Dialog — captures cancellation reason */}
+      <Dialog open={!!rejectingOrder} onOpenChange={(o) => { if (!o && !confirmingReject) { setRejectingOrder(null); setRejectReason(""); } }}>
+        <DialogContent className="sm:max-w-[440px]">
+          {rejectingOrder && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-red-600 flex items-center gap-2">
+                  <XCircle className="w-4 h-4" />
+                  Reject Order
+                </DialogTitle>
+              </DialogHeader>
+              <div className="py-2 space-y-3">
+                <p className="text-sm text-black">
+                  Reject the order for{" "}
+                  <span className="font-semibold">{rejectingOrder.customerName}</span>?
+                  This will mark the order as <span className="font-semibold">Cancelled</span>.
+                </p>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-black">Reason for cancellation <span className="text-red-500">*</span></Label>
+                  <Textarea
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="e.g. Item out of stock, customer requested cancellation, address unreachable..."
+                    className="text-sm min-h-[90px]"
+                    autoFocus
+                  />
+                  <p className="text-[11px] text-black">This reason will be saved with the order.</p>
+                </div>
+              </div>
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => { setRejectingOrder(null); setRejectReason(""); }} disabled={confirmingReject} className="h-9">Cancel</Button>
+                <Button
+                  onClick={submitReject}
+                  disabled={confirmingReject || !rejectReason.trim()}
+                  className="bg-red-600 hover:bg-red-700 h-9 text-white gap-1.5"
+                >
+                  <XCircle className="w-4 h-4" />
+                  {confirmingReject ? "Rejecting..." : "Reject Order"}
                 </Button>
               </DialogFooter>
             </>
