@@ -2582,10 +2582,11 @@ export default function Orders() {
             </div>
           </div>
 
-          {/* ── RIGHT: ORDER PANEL — single scroll, no tabs ── */}
-          <div className="w-[500px] flex-shrink-0 border-l border-gray-200 bg-white flex flex-col overflow-hidden">
+          {/* ── RIGHT: ORDER PANEL — split: customer/schedule | cart ── */}
+          <div className="w-[560px] flex-shrink-0 border-l border-gray-200 bg-white flex flex-row overflow-hidden">
 
-            {/* ─── Customer + Address + Schedule ─── */}
+            {/* ── Left half: Customer + Address + Schedule ── */}
+            <div className="w-[280px] flex-shrink-0 border-r border-gray-200 flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto">
 
               {/* Customer — phone-search UX */}
@@ -2731,15 +2732,11 @@ export default function Orders() {
                           const extra = Number(t.extraCharge) || 0;
                           return (
                             <button key={id} type="button" onClick={() => setSelectedTimeslotId(id)}
-                              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-all ${isSelected ? "border-[#1A56DB] bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"}`}
+                              className={`flex items-center justify-between px-3 py-2 rounded-lg border text-left transition-all ${isSelected ? "border-[#1A56DB] bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"}`}
                             >
-                              <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 ${isSelected ? "bg-[#1A56DB] text-white" : "bg-gray-100 text-gray-400"}`}>
-                                {t.isInstant ? <Zap className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-bold text-[#162B4D] truncate">{t.label}</p>
-                                <p className="text-[11px] text-gray-400">{t.startTime}–{t.endTime}{extra > 0 ? ` +₹${extra}` : ""}</p>
-                              </div>
+                              <span className={`text-xs font-semibold ${isSelected ? "text-[#1A56DB]" : "text-[#162B4D]"}`}>
+                                {t.startTime}–{t.endTime}{extra > 0 ? ` +₹${extra}` : ""}
+                              </span>
                               {isSelected && <Check className="w-3 h-3 text-[#1A56DB] flex-shrink-0" />}
                             </button>
                           );
@@ -2751,9 +2748,51 @@ export default function Orders() {
                 </div>
               )}
             </div>
+            </div>{/* end left half */}
 
+            {/* ── Right half: Punched Orders / Cart ── */}
+            <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
+              <div className="px-3 pt-3 pb-2 border-b border-gray-100 flex-shrink-0 flex items-center justify-between">
+                <p className="text-xs font-bold text-[#162B4D] uppercase tracking-widest">Order</p>
+                {selectedProducts.length > 0 && (
+                  <span className="text-[11px] font-bold text-[#F05B4E]">{totalItemCount} item{totalItemCount !== 1 ? "s" : ""}</span>
+                )}
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {selectedProducts.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                    <div className="w-12 h-12 rounded-2xl bg-gray-200 flex items-center justify-center mb-2">
+                      <ShoppingBag className="w-5 h-5 text-gray-400" />
+                    </div>
+                    <p className="text-sm font-medium text-gray-400">Cart is empty</p>
+                    <p className="text-xs text-gray-300 mt-0.5">Tap products to add</p>
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 space-y-0">
+                    {selectedProducts.map((p) => {
+                      const stock = stockOf(p.productId);
+                      const atMax = p.quantity >= stock;
+                      return (
+                        <div key={p.productId} className="flex items-center gap-2 py-2 border-b border-gray-100 last:border-0">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-[#162B4D] leading-tight truncate">{p.name}</p>
+                            <p className="text-[11px] text-gray-400">₹{Number(p.price).toLocaleString("en-IN")}{p.unit ? ` / ${p.unit}` : ""}</p>
+                          </div>
+                          <div className="flex items-center bg-white rounded-md border border-gray-200 overflow-hidden flex-shrink-0">
+                            <button onClick={() => setSelectedProducts((arr) => p.quantity <= 1 ? arr.filter((x) => x.productId !== p.productId) : arr.map((x) => x.productId === p.productId ? { ...x, quantity: x.quantity - 1 } : x))} className="w-6 h-6 flex items-center justify-center text-gray-500 hover:bg-gray-100 font-bold">−</button>
+                            <span className="text-xs font-bold text-gray-700 min-w-[18px] text-center">{p.quantity}</span>
+                            <button disabled={atMax} onClick={() => { if (!atMax) setSelectedProducts((arr) => arr.map((x) => x.productId === p.productId ? { ...x, quantity: x.quantity + 1 } : x)); }} className="w-6 h-6 flex items-center justify-center text-gray-500 hover:bg-gray-100 font-bold disabled:opacity-30">+</button>
+                          </div>
+                          <span className="text-xs font-bold text-[#162B4D] w-12 text-right flex-shrink-0">₹{(p.price * p.quantity).toLocaleString("en-IN")}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>{/* end right half */}
 
-          </div>
+          </div>{/* end right panel */}
 
         </div>{/* end 3-col body */}
 
