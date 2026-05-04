@@ -2367,7 +2367,7 @@ export default function Orders() {
 
       {/* Create Order Page — Full-screen POS (portal bypasses layout header+sidebar) */}
       {isCreatePage && createPortal(
-      <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-hidden">
+      <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-hidden" style={{ fontFamily: "'Poppins', sans-serif" }}>
 
         {/* ══ TOP HEADER ══ */}
         <div className="flex-shrink-0 bg-[#364F9F] flex items-center gap-3 px-4 h-14">
@@ -2539,12 +2539,12 @@ export default function Orders() {
                           });
                         }}
                       >
-                        <div className="p-4 pb-10">
-                          <p className="text-sm font-medium text-[#162B4D] leading-snug line-clamp-2">{p.name}</p>
-                          {p.category && <p className="text-xs text-gray-400 uppercase tracking-wide mt-1 truncate">{p.category}</p>}
-                          <p className="text-base font-semibold text-[#1A56DB] mt-2">₹{Number(p.price).toLocaleString("en-IN")}</p>
+                        <div className="p-3 flex flex-col pb-10">
+                          <p className="text-sm font-medium text-[#162B4D] leading-snug line-clamp-2 min-h-[2.5rem]">{p.name}</p>
+                          <p className="text-xs text-gray-400 uppercase tracking-wide mt-1 truncate h-4">{p.category || ""}</p>
+                          <p className="text-base font-semibold text-[#1A56DB] mt-1">₹{Number(p.price).toLocaleString("en-IN")}</p>
                           {lowStock && !outOfStock && (
-                            <p className="text-xs font-medium text-amber-500 mt-1">Only {stock} left</p>
+                            <p className="text-xs font-medium text-amber-500 mt-0.5">Only {stock} left</p>
                           )}
                         </div>
                         {/* Cart qty badge / add button */}
@@ -2583,10 +2583,10 @@ export default function Orders() {
           </div>
 
           {/* ── RIGHT: ORDER PANEL — split: customer/schedule | cart ── */}
-          <div className="w-[560px] flex-shrink-0 border-l border-gray-200 bg-white flex flex-row overflow-hidden">
+          <div className="w-[600px] flex-shrink-0 border-l border-gray-200 bg-white flex flex-row overflow-hidden">
 
             {/* ── Left half: Customer + Address + Schedule ── */}
-            <div className="w-[280px] flex-shrink-0 border-r border-gray-200 flex flex-col overflow-hidden">
+            <div className="w-[320px] flex-shrink-0 border-r border-gray-200 flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto">
 
               {/* Customer — phone-search UX */}
@@ -2621,6 +2621,7 @@ export default function Orders() {
                             const val = e.target.value.replace(/\D/g, "").slice(0, 10);
                             setCustomerSearch(val);
                             setNewCustomer((n) => ({ ...n, phone: val }));
+                            setNewAddress((a) => ({ ...a, phone: val }));
                           }}
                           placeholder="Enter customer phone number"
                           className="pl-8 h-8 text-sm"
@@ -2637,7 +2638,7 @@ export default function Orders() {
                         <div className="mt-1.5 border border-gray-200 rounded-lg overflow-hidden">
                           {phoneMatches.slice(0, 4).map((c: any) => (
                             <button key={c.id} type="button"
-                              onClick={() => { setChosenCustomer(c); const addrs = Array.isArray(c.addresses) ? c.addresses : []; const defaultIdx = addrs.findIndex((a: any) => getAddressFields(a)?.isDefault); setSelectedAddressIdx(addrs.length ? (defaultIdx >= 0 ? defaultIdx : 0) : null); setOrderAddressMode(addrs.length ? "saved" : "new"); setCustomerSearch(""); if (!newAddress.name) setNewAddress((a) => ({ ...a, name: c.name || "", phone: c.phone || "" })); }}
+                              onClick={() => { setChosenCustomer(c); const addrs = Array.isArray(c.addresses) ? c.addresses : []; const defaultIdx = addrs.findIndex((a: any) => getAddressFields(a)?.isDefault); setSelectedAddressIdx(addrs.length ? (defaultIdx >= 0 ? defaultIdx : 0) : null); setOrderAddressMode(addrs.length ? "saved" : "new"); setCustomerSearch(""); setNewAddress((a) => ({ ...a, name: c.name || "", phone: c.phone || "" })); }}
                               className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-blue-50 transition-colors text-left border-b border-gray-100 last:border-0"
                             >
                               <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-600 flex-shrink-0">{c.name?.charAt(0).toUpperCase() || "?"}</div>
@@ -2655,7 +2656,7 @@ export default function Orders() {
                       {noMatch && (
                         <div className="mt-2 space-y-1.5">
                           <p className="text-xs font-semibold text-[#1A56DB] flex items-center gap-1.5"><UserPlus className="w-3.5 h-3.5" />New customer — fill in details</p>
-                          <Input value={newCustomer.name} onChange={(e) => setNewCustomer((n) => ({ ...n, name: e.target.value }))} placeholder="Full name *" className="h-8 text-sm" />
+                          <Input value={newCustomer.name} onChange={(e) => { setNewCustomer((n) => ({ ...n, name: e.target.value })); setNewAddress((a) => ({ ...a, name: e.target.value })); }} placeholder="Full name *" className="h-8 text-sm" />
                           <Input value={newCustomer.email} onChange={(e) => setNewCustomer((n) => ({ ...n, email: e.target.value }))} placeholder="Email (optional)" className="h-8 text-sm" type="email" />
                           <Input value={newCustomer.dateOfBirth} onChange={(e) => setNewCustomer((n) => ({ ...n, dateOfBirth: e.target.value }))} placeholder="Date of birth (optional)" className="h-8 text-sm" type="date" />
                         </div>
@@ -2716,7 +2717,7 @@ export default function Orders() {
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs font-bold text-[#162B4D] uppercase tracking-widest flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" />Schedule</p>
                     <div className="flex items-center gap-0.5 bg-gray-100 rounded-full p-0.5">
-                      <button onClick={() => setOrderScheduleType("instant")} className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all ${orderScheduleType === "instant" ? "bg-amber-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}><Zap className="w-3 h-3" />Instant</button>
+                      <button onClick={() => setOrderScheduleType("instant")} className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${orderScheduleType === "instant" ? "bg-amber-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Instant</button>
                       <button onClick={() => setOrderScheduleType("slot")} className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${orderScheduleType === "slot" ? "bg-[#1A56DB] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>By Slot</button>
                     </div>
                   </div>
@@ -2737,7 +2738,6 @@ export default function Orders() {
                               <span className={`text-xs font-semibold ${isSelected ? "text-[#1A56DB]" : "text-[#162B4D]"}`}>
                                 {t.startTime}–{t.endTime}{extra > 0 ? ` +₹${extra}` : ""}
                               </span>
-                              {isSelected && <Check className="w-3 h-3 text-[#1A56DB] flex-shrink-0" />}
                             </button>
                           );
                         })}
@@ -2838,8 +2838,28 @@ export default function Orders() {
         {/* ══ FULL-WIDTH BOTTOM BAR ══ */}
         <div className="flex-shrink-0 border-t-2 border-gray-100 bg-white flex items-stretch divide-x divide-gray-100" style={{ minHeight: "76px" }}>
 
-          {/* ── Zone 1: Totals ── */}
-          <div className="w-52 flex-shrink-0 px-4 py-3 flex flex-col justify-center gap-0.5">
+          {/* ── Zone 1: Notes ── */}
+          <div className="flex-1 px-4 py-3 flex flex-col justify-center">
+            <Textarea value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} placeholder="Order notes (optional)..." className="text-xs min-h-[28px] max-h-[40px] resize-none bg-gray-50 border-gray-200" rows={1} />
+          </div>
+
+          {/* ── Zone 2: Payment ── */}
+          <div className="flex-1 px-4 py-3 flex flex-col justify-center gap-2">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Payment</p>
+            <div className="flex items-center gap-2">
+              <button type="button"
+                onClick={() => { setPaymentStatus("paid"); setPaymentEntries([{ mode: "upi", amount: String(newOrderTotal || 0), reference: "" }]); }}
+                className={`px-4 py-1.5 rounded-lg border-2 text-sm font-semibold transition-all ${paymentStatus === "paid" && paymentEntries[0]?.mode === "upi" ? "border-[#1A56DB] bg-[#1A56DB] text-white" : "border-gray-200 text-gray-600 hover:bg-blue-50 hover:border-blue-300"}`}
+              >UPI</button>
+              <button type="button"
+                onClick={() => { setPaymentStatus("unpaid"); setPaymentEntries([{ mode: "cash", amount: "0", reference: "" }]); }}
+                className={`px-4 py-1.5 rounded-lg border-2 text-sm font-semibold transition-all ${paymentStatus === "unpaid" ? "border-amber-400 bg-amber-50 text-amber-700" : "border-gray-200 text-gray-600 hover:bg-amber-50 hover:border-amber-300"}`}
+              >COD</button>
+            </div>
+          </div>
+
+          {/* ── Zone 3: Totals + CTA ── */}
+          <div className="w-64 flex-shrink-0 px-4 py-3 flex flex-col justify-center gap-1.5">
             <div className="flex justify-between text-xs text-gray-400">
               <span>Subtotal</span>
               <span>₹{itemsSubtotal.toLocaleString("en-IN")}</span>
@@ -2856,47 +2876,14 @@ export default function Orders() {
                 <span>+₹{slotExtraCharge.toLocaleString("en-IN")}</span>
               </div>
             )}
-            <div className="flex justify-between items-center mt-1 pt-1 border-t border-gray-100">
+            <div className="flex justify-between items-center pt-1 border-t border-gray-100">
               <span className="text-sm font-bold text-[#162B4D]">Total</span>
-              <span className="text-2xl font-extrabold text-[#162B4D]">₹{newOrderTotal.toLocaleString("en-IN")}</span>
+              <span className="text-xl font-extrabold text-[#162B4D]">₹{newOrderTotal.toLocaleString("en-IN")}</span>
             </div>
-          </div>
-
-          {/* ── Zone 3: Payment ── */}
-          <div className="flex-1 px-4 py-3 flex flex-col justify-center gap-2">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Payment</p>
-            <div className="flex items-center gap-2">
-              <button type="button"
-                onClick={() => { setPaymentStatus("paid"); setPaymentEntries([{ mode: "upi", amount: String(newOrderTotal || 0), reference: "" }]); }}
-                className={`px-4 py-1.5 rounded-lg border-2 text-sm font-semibold transition-all ${paymentStatus === "paid" && paymentEntries[0]?.mode === "upi" ? "border-[#1A56DB] bg-[#1A56DB] text-white" : "border-gray-200 text-gray-600 hover:bg-blue-50 hover:border-blue-300"}`}
-              >UPI</button>
-              <button type="button"
-                onClick={() => { setPaymentEntries([{ mode: "cash", amount: String(newOrderTotal || 0), reference: "" }]); }}
-                className={`px-4 py-1.5 rounded-lg border-2 text-sm font-semibold transition-all ${paymentEntries[0]?.mode === "cash" || paymentStatus === "unpaid" ? "border-emerald-400 bg-emerald-500 text-white" : "border-gray-200 text-gray-600 hover:bg-emerald-50 hover:border-emerald-300"}`}
-              >Cash / COD</button>
-              {(paymentEntries[0]?.mode === "cash" || paymentStatus === "unpaid") && (<>
-                <button type="button"
-                  onClick={() => { setPaymentStatus("paid"); setPaymentEntries([{ mode: "cash", amount: String(newOrderTotal || 0), reference: "" }]); }}
-                  className={`px-3 py-1.5 rounded-lg border-2 text-sm font-semibold transition-all ${paymentStatus === "paid" && paymentEntries[0]?.mode === "cash" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
-                >Paid</button>
-                <button type="button"
-                  onClick={() => { setPaymentStatus("unpaid"); setPaymentEntries([{ mode: "cash", amount: "0", reference: "" }]); }}
-                  className={`px-3 py-1.5 rounded-lg border-2 text-sm font-semibold transition-all ${paymentStatus === "unpaid" ? "border-amber-400 bg-amber-50 text-amber-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
-                >COD</button>
-              </>)}
-              {paymentStatus === "paid" && paymentEntries[0]?.mode === "upi" && (
-                <Input value={paymentEntries[0]?.reference ?? ""} onChange={(e) => setPaymentEntries((arr) => arr.map((p, i) => i === 0 ? { ...p, reference: e.target.value } : p))} placeholder="UPI Transaction ID (optional)" className="h-8 text-sm flex-1 max-w-[200px]" />
-              )}
-            </div>
-          </div>
-
-          {/* ── Zone 4: Notes + CTA ── */}
-          <div className="w-64 flex-shrink-0 px-4 py-3 flex flex-col justify-center gap-2">
-            <Textarea value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} placeholder="Order notes (optional)..." className="text-xs min-h-[28px] max-h-[40px] resize-none bg-gray-50 border-gray-200" rows={1} />
             <Button
               onClick={handleCreateOrder}
               disabled={creatingSaving || totalItemCount === 0}
-              className="w-full h-10 bg-[#F05B4E] hover:bg-[#d94a3e] text-white font-bold text-sm rounded-xl gap-2 disabled:opacity-50"
+              className="w-full h-9 bg-[#F05B4E] hover:bg-[#d94a3e] text-white font-bold text-sm rounded-xl gap-2 disabled:opacity-50"
             >
               {creatingSaving
                 ? (editingOrderId ? "Saving..." : "Creating...")
