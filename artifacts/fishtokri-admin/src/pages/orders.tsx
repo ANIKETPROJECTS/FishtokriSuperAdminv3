@@ -2386,7 +2386,7 @@ export default function Orders() {
           {/* Hub selectors */}
           <div className="flex items-center gap-2 flex-1 min-w-0 ml-2">
             <Select value={selectedSuperHubId} onValueChange={(v) => { if (!loadingSuperHubs) setSelectedSuperHubId(v); }}>
-              <SelectTrigger className="h-8 text-xs rounded-full px-3 w-auto max-w-[140px] bg-[#F05B4E] border-none shadow-none text-white [&>svg]:text-white hover:bg-[#e04a3d] transition-colors font-semibold">
+              <SelectTrigger className={`h-8 text-xs rounded-full px-3 w-auto max-w-[140px] border-none shadow-none text-white [&>svg]:text-white transition-colors font-semibold ${selectedSuperHubId ? "bg-[#F05B4E] hover:bg-[#e04a3d]" : "bg-white/20 hover:bg-white/30"}`}>
                 <SelectValue placeholder={loadingSuperHubs ? "Loading..." : "Super Hub"} />
               </SelectTrigger>
               <SelectContent>
@@ -2397,7 +2397,7 @@ export default function Orders() {
             </Select>
             <ChevronRight className="w-3.5 h-3.5 text-white flex-shrink-0" />
             <Select value={selectedSubHubId} onValueChange={(v) => { if (selectedSuperHubId && !loadingSubHubs) setSelectedSubHubId(v); }}>
-              <SelectTrigger className="h-8 text-xs rounded-full px-3 w-auto max-w-[140px] bg-[#F05B4E] border-none shadow-none text-white [&>svg]:text-white hover:bg-[#e04a3d] transition-colors font-semibold">
+              <SelectTrigger className={`h-8 text-xs rounded-full px-3 w-auto max-w-[140px] border-none shadow-none text-white [&>svg]:text-white transition-colors font-semibold ${selectedSubHubId ? "bg-[#F05B4E] hover:bg-[#e04a3d]" : "bg-white/20 hover:bg-white/30"}`}>
                 <SelectValue placeholder={!selectedSuperHubId ? "Sub Hub" : loadingSubHubs ? "Loading..." : "Sub Hub"} />
               </SelectTrigger>
               <SelectContent>
@@ -2522,7 +2522,7 @@ export default function Orders() {
                     return (
                       <div
                         key={pid}
-                        className={`rounded-xl border-2 transition-all select-none ${
+                        className={`rounded-xl border-2 transition-all select-none flex flex-col ${
                           outOfStock
                             ? "border-gray-100 bg-gray-50 opacity-40 cursor-not-allowed"
                             : cartItem
@@ -2539,17 +2539,17 @@ export default function Orders() {
                           });
                         }}
                       >
-                        <div className="p-2.5 flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()}>
-                          <p className="text-sm font-medium text-[#162B4D] leading-snug line-clamp-2" onClick={(e) => { e.stopPropagation(); if (!outOfStock && !atMax) { setSelectedProducts((prev) => { const exists = prev.find((sp) => sp.productId === pid); if (exists) return prev.map((sp) => sp.productId === pid ? { ...sp, quantity: sp.quantity + 1 } : sp); return [...prev, { productId: pid, name: p.name, price: Number(p.price) || 0, unit: p.unit ?? "", quantity: 1 }]; }); } }}>{p.name}</p>
-                          <p className="text-xs text-gray-400 uppercase tracking-wide truncate">{p.category || ""}</p>
-                          <div className="flex items-center justify-between mt-1.5 gap-1">
-                            <div className="min-w-0">
+                        <div className="p-2.5 flex flex-col flex-1">
+                          <p className="text-sm font-medium text-[#162B4D] leading-snug line-clamp-2 min-h-[2.5rem]">{p.name}</p>
+                          <p className="text-xs text-gray-400 uppercase tracking-wide truncate h-4">{p.category || "\u00A0"}</p>
+                          <div className="flex items-center justify-between mt-auto pt-1.5 gap-1">
+                            <div className="min-w-0 flex-1">
                               <p className="text-sm font-semibold text-[#1A56DB]">₹{Number(p.price).toLocaleString("en-IN")}</p>
                               {lowStock && !outOfStock && <p className="text-[10px] font-medium text-amber-500 leading-none">Only {stock} left</p>}
                               {outOfStock && <p className="text-[10px] font-bold text-red-500 leading-none">Out of stock</p>}
                             </div>
                             {cartItem ? (
-                              <div className="flex items-center bg-[#1A56DB] rounded-lg overflow-hidden shadow-sm flex-shrink-0">
+                              <div className="flex items-center bg-[#1A56DB] rounded-lg overflow-hidden shadow-sm flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                                 <button
                                   className="w-6 h-6 flex items-center justify-center text-white hover:bg-[#1447B4] font-bold text-sm"
                                   onClick={(e) => { e.stopPropagation(); setSelectedProducts((arr) => cartItem.quantity <= 1 ? arr.filter((x) => x.productId !== pid) : arr.map((x) => x.productId === pid ? { ...x, quantity: x.quantity - 1 } : x)); }}
@@ -2562,7 +2562,7 @@ export default function Orders() {
                                 >+</button>
                               </div>
                             ) : !outOfStock && (
-                              <div className="w-6 h-6 rounded-full bg-[#1A56DB] flex items-center justify-center shadow-sm flex-shrink-0" onClick={(e) => { e.stopPropagation(); setSelectedProducts((prev) => { const exists = prev.find((sp) => sp.productId === pid); if (exists) return prev.map((sp) => sp.productId === pid ? { ...sp, quantity: sp.quantity + 1 } : sp); return [...prev, { productId: pid, name: p.name, price: Number(p.price) || 0, unit: p.unit ?? "", quantity: 1 }]; }); }}>
+                              <div className="w-6 h-6 rounded-full bg-[#1A56DB] flex items-center justify-center shadow-sm flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                                 <Plus className="w-3.5 h-3.5 text-white" />
                               </div>
                             )}
@@ -2599,38 +2599,47 @@ export default function Orders() {
                   </div>
 
                 ) : (() => {
-                  const digits = customerSearch.replace(/\D/g, "").slice(0, 10);
-                  const phoneMatches = allCustomers.filter((c: any) => (c.phone || "").replace(/\D/g, "").includes(digits) && digits.length > 0);
-                  const isComplete = digits.length === 10;
+                  const searchTrimmed = customerSearch.trim();
+                  const isPhoneOnly = /^\d+$/.test(searchTrimmed);
+                  const digits = searchTrimmed.replace(/\D/g, "").slice(0, 10);
+                  const phoneMatches = isPhoneOnly && digits.length > 0
+                    ? allCustomers.filter((c: any) => (c.phone || "").replace(/\D/g, "").includes(digits))
+                    : [];
+                  const nameMatches = !isPhoneOnly && searchTrimmed.length > 1
+                    ? allCustomers.filter((c: any) => (c.name || "").toLowerCase().includes(searchTrimmed.toLowerCase()))
+                    : [];
+                  const allMatches = isPhoneOnly ? phoneMatches : nameMatches;
+                  const isComplete = isPhoneOnly && digits.length === 10;
                   const noMatch = isComplete && phoneMatches.length === 0;
 
                   return (
                     <>
-                      {/* Phone input */}
+                      {/* Phone / Name search input */}
                       <div className="relative">
-                        <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                        <Phone className="absolute left-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                         <Input
                           value={customerSearch}
                           onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                            const val = e.target.value;
                             setCustomerSearch(val);
-                            setNewCustomer((n) => ({ ...n, phone: val }));
-                            setNewAddress((a) => ({ ...a, phone: val }));
+                            const nums = val.replace(/\D/g, "").slice(0, 10);
+                            if (/^\d+$/.test(val)) {
+                              setNewCustomer((n) => ({ ...n, phone: nums }));
+                              setNewAddress((a) => ({ ...a, phone: nums }));
+                            }
                           }}
-                          placeholder="Enter customer phone number"
-                          className="pl-8 h-8 text-sm"
-                          inputMode="numeric"
-                          maxLength={10}
+                          placeholder="Search by name or phone…"
+                          className="pl-6 h-8 text-sm border-0 border-b border-gray-300 rounded-none bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                         />
                         {customerSearch.length > 0 && (
-                          <button onClick={() => { setCustomerSearch(""); setNewCustomer({ name: "", phone: "", email: "", dateOfBirth: "" }); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500"><X className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => { setCustomerSearch(""); setNewCustomer({ name: "", phone: "", email: "", dateOfBirth: "" }); }} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500"><X className="w-3.5 h-3.5" /></button>
                         )}
                       </div>
 
                       {/* Matching existing customers */}
-                      {!noMatch && phoneMatches.length > 0 && (
+                      {!noMatch && allMatches.length > 0 && (
                         <div className="mt-1.5 border border-gray-200 rounded-lg overflow-hidden">
-                          {phoneMatches.slice(0, 4).map((c: any) => (
+                          {allMatches.slice(0, 4).map((c: any) => (
                             <button key={c.id} type="button"
                               onClick={() => { setChosenCustomer(c); const addrs = Array.isArray(c.addresses) ? c.addresses : []; const defaultIdx = addrs.findIndex((a: any) => getAddressFields(a)?.isDefault); setSelectedAddressIdx(addrs.length ? (defaultIdx >= 0 ? defaultIdx : 0) : null); setOrderAddressMode(addrs.length ? "saved" : "new"); setCustomerSearch(""); setNewAddress((a) => ({ ...a, name: c.name || "", phone: c.phone || "" })); }}
                               className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-blue-50 transition-colors text-left border-b border-gray-100 last:border-0"
@@ -2650,9 +2659,9 @@ export default function Orders() {
                       {noMatch && (
                         <div className="mt-2 space-y-1.5">
                           <p className="text-xs font-semibold text-[#1A56DB] flex items-center gap-1.5"><UserPlus className="w-3.5 h-3.5" />New customer — fill in details</p>
-                          <Input value={newCustomer.name} onChange={(e) => { setNewCustomer((n) => ({ ...n, name: e.target.value })); setNewAddress((a) => ({ ...a, name: e.target.value })); }} placeholder="Full name *" className="h-8 text-sm" />
-                          <Input value={newCustomer.email} onChange={(e) => setNewCustomer((n) => ({ ...n, email: e.target.value }))} placeholder="Email (optional)" className="h-8 text-sm" type="email" />
-                          <Input value={newCustomer.dateOfBirth} onChange={(e) => setNewCustomer((n) => ({ ...n, dateOfBirth: e.target.value }))} placeholder="Date of birth (optional)" className="h-8 text-sm" type="date" />
+                          <Input value={newCustomer.name} onChange={(e) => { setNewCustomer((n) => ({ ...n, name: e.target.value })); setNewAddress((a) => ({ ...a, name: e.target.value })); }} placeholder="Full name *" className="h-8 text-sm border-0 border-b border-gray-300 rounded-none bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-0" />
+                          <Input value={newCustomer.email} onChange={(e) => setNewCustomer((n) => ({ ...n, email: e.target.value }))} placeholder="Email (optional)" className="h-8 text-sm border-0 border-b border-gray-300 rounded-none bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-0" type="email" />
+                          <Input value={newCustomer.dateOfBirth} onChange={(e) => setNewCustomer((n) => ({ ...n, dateOfBirth: e.target.value }))} placeholder="Date of birth (optional)" className="h-8 text-sm border-0 border-b border-gray-300 rounded-none bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-0" type="date" />
                         </div>
                       )}
                     </>
@@ -2692,13 +2701,13 @@ export default function Orders() {
                           <button key={lbl} type="button" onClick={() => setNewAddress((a) => ({ ...a, label: lbl }))} className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${newAddress.label === lbl ? "bg-[#1A56DB] text-white border-[#1A56DB]" : "border-gray-200 text-gray-500 bg-white hover:bg-gray-50"}`}>{lbl}</button>
                         ))}
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Input value={newAddress.name} onChange={(e) => setNewAddress((a) => ({ ...a, name: e.target.value }))} placeholder="Recipient name *" className="h-8 text-sm col-span-2" />
-                        <Input value={newAddress.phone} onChange={(e) => setNewAddress((a) => ({ ...a, phone: e.target.value.replace(/\D/g, "").slice(0, 10) }))} placeholder="Phone *" className="h-8 text-sm col-span-2" inputMode="numeric" />
-                        <Input value={newAddress.building} onChange={(e) => setNewAddress((a) => ({ ...a, building: e.target.value }))} placeholder="Building / Flat *" className="h-8 text-sm col-span-2" />
-                        <Input value={newAddress.street} onChange={(e) => setNewAddress((a) => ({ ...a, street: e.target.value }))} placeholder="Street / Landmark" className="h-8 text-sm col-span-2" />
-                        <Input value={newAddress.area} onChange={(e) => setNewAddress((a) => ({ ...a, area: e.target.value }))} placeholder="Area *" className="h-8 text-sm" />
-                        <Input value={newAddress.pincode} onChange={(e) => setNewAddress((a) => ({ ...a, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) }))} placeholder="Pincode *" className="h-8 text-sm" inputMode="numeric" />
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-0">
+                        <Input value={newAddress.name} onChange={(e) => setNewAddress((a) => ({ ...a, name: e.target.value }))} placeholder="Recipient name *" className="h-8 text-sm col-span-2 border-0 border-b border-gray-300 rounded-none bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-0" />
+                        <Input value={newAddress.phone} onChange={(e) => setNewAddress((a) => ({ ...a, phone: e.target.value.replace(/\D/g, "").slice(0, 10) }))} placeholder="Phone *" className="h-8 text-sm col-span-2 border-0 border-b border-gray-300 rounded-none bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-0" inputMode="numeric" />
+                        <Input value={newAddress.building} onChange={(e) => setNewAddress((a) => ({ ...a, building: e.target.value }))} placeholder="Building / Flat *" className="h-8 text-sm col-span-2 border-0 border-b border-gray-300 rounded-none bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-0" />
+                        <Input value={newAddress.street} onChange={(e) => setNewAddress((a) => ({ ...a, street: e.target.value }))} placeholder="Street / Landmark" className="h-8 text-sm col-span-2 border-0 border-b border-gray-300 rounded-none bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-0" />
+                        <Input value={newAddress.area} onChange={(e) => setNewAddress((a) => ({ ...a, area: e.target.value }))} placeholder="Area *" className="h-8 text-sm border-0 border-b border-gray-300 rounded-none bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-0" />
+                        <Input value={newAddress.pincode} onChange={(e) => setNewAddress((a) => ({ ...a, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) }))} placeholder="Pincode *" className="h-8 text-sm border-0 border-b border-gray-300 rounded-none bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-0" inputMode="numeric" />
                       </div>
                     </div>
                   )}
@@ -2796,28 +2805,28 @@ export default function Orders() {
                   <Button type="button" variant="outline" onClick={applyCouponByCode} disabled={!couponCode.trim()} className="h-7 text-xs px-2.5">Apply</Button>
                 </div>
                 {couponError && <p className="text-[11px] text-red-500 mt-1">{couponError}</p>}
-                {appliedCoupons.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {appliedCoupons.map((c) => (
-                      <span key={String(c._id)} className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
-                        <Ticket className="w-3 h-3" />{c.code}
-                        <button onClick={() => setAppliedCouponIds((ids) => ids.filter((id) => id !== String(c._id)))} className="hover:text-red-500 ml-0.5"><X className="w-3 h-3" /></button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {!appliedCoupons.length && totalItemCount > 0 && !loadingCoupons && activeCoupons.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {activeCoupons.slice(0, 3).map((c) => {
+                {totalItemCount > 0 && !loadingCoupons && activeCoupons.length > 0 && (
+                  <div className="mt-1.5 divide-y divide-gray-100 border border-gray-100 rounded-lg overflow-hidden">
+                    {activeCoupons.slice(0, 5).map((c) => {
                       const cid = String(c._id);
+                      const isApplied = appliedCouponIds.includes(cid);
                       const min = Number(c.minOrderAmount) || 0;
                       const meetsMin = itemsSubtotal >= min;
                       const canApply = isCouponApplicable(c) && meetsMin;
                       const label = c.type === "percentage" ? `${Number(c.discountValue)}% OFF` : `₹${Number(c.discountValue)} OFF`;
                       return (
-                        <button key={cid} type="button" onClick={() => canApply && toggleCoupon(cid)} disabled={!canApply}
-                          className={`text-[11px] font-semibold px-2 py-0.5 rounded border transition-all ${canApply ? "border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100" : "border-gray-100 text-gray-400 bg-gray-50 cursor-not-allowed opacity-60"}`}
-                        >{c.code} · {label}</button>
+                        <div key={cid} className="flex items-center justify-between px-2.5 py-1.5">
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-[#162B4D]">{c.code}</span>
+                            <span className="text-[11px] text-gray-400 ml-1.5">{label}</span>
+                            {min > 0 && !meetsMin && <p className="text-[10px] text-gray-400">Min ₹{min}</p>}
+                          </div>
+                          {isApplied ? (
+                            <button onClick={() => setAppliedCouponIds((ids) => ids.filter((id) => id !== cid))} className="text-[11px] font-semibold text-red-500 hover:text-red-600 flex-shrink-0 ml-2">Remove</button>
+                          ) : (
+                            <button onClick={() => canApply && toggleCoupon(cid)} disabled={!canApply} className={`text-[11px] font-semibold flex-shrink-0 ml-2 transition-colors ${canApply ? "text-emerald-600 hover:text-emerald-700" : "text-gray-300 cursor-not-allowed"}`}>Apply</button>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
