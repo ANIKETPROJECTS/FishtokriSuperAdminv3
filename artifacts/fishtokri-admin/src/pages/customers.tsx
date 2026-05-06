@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   Plus, Search, Edit2, Trash2, Mail, Phone, Calendar,
@@ -197,6 +198,25 @@ function normalize(value: any) {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function getCustomerLocation(customer: Customer) {
+  const addr = customer.addresses?.[0];
+  if (!addr) return { pincode: null, city: null, name: null };
+  return {
+    pincode: addr.pincode || addr.zipCode || null,
+    city: addr.city || null,
+    name: addr.name || null,
+  };
+}
+
+function getCustomerTotalSpend(customer: Customer) {
+  const { all } = splitOrders(customer);
+  return all.reduce((sum: number, order: any) => sum + getOrderTotal(order), 0);
+}
+
+function getCustomerTotalOrders(customer: Customer) {
+  return splitOrders(customer).all.length;
+}
+
 function getOrderId(order: any) {
   return String(order?._id ?? order?.id ?? order?.orderId ?? order?.orderNumber ?? "");
 }
@@ -345,16 +365,25 @@ export default function Customers() {
     );
   }
 
+  const headerSlot = document.getElementById("page-header-slot");
+
   return (
     <div style={{ fontFamily: "'Poppins', sans-serif" }}>
-      <div className="flex items-start justify-between gap-4 mb-5">
-        <div>
-          <h1 className="text-2xl font-bold text-black">Customers</h1>
-          <p className="text-sm text-black mt-0.5">
-            Manage all registered customers with saved addresses, current orders and order history.
-            {total > 0 && <span className="font-bold ml-1">{total} total</span>}
-          </p>
-        </div>
+      {headerSlot && createPortal(
+        <div className="flex items-center justify-between w-full min-w-0">
+          <div className="min-w-0">
+            <h1 className="text-sm font-bold text-[#162B4D] leading-tight">Customers</h1>
+            <p className="text-xs text-gray-500 leading-tight hidden sm:block">
+              Manage all registered customers with saved addresses, current orders and order history.
+            </p>
+          </div>
+          <span className="text-3xl font-bold text-[#162B4D] flex-shrink-0 ml-4">{total}</span>
+        </div>,
+        headerSlot,
+      )}
+
+      <div className="flex items-center justify-between gap-4 mb-5">
+        <div />
         <Button
           onClick={() => { setEditingCustomer(null); setIsModalOpen(true); }}
           className="bg-[#1A56DB] hover:bg-[#1447B4] text-white h-9 px-4 text-sm font-semibold flex-shrink-0"
@@ -504,16 +533,18 @@ export default function Customers() {
                 <tr className="border-b border-gray-200 text-xs font-semibold text-black uppercase tracking-wide">
                   <th className="px-3 py-4 text-left">Customer</th>
                   <th className="px-3 py-4 text-left">Contact</th>
-                  <th className="px-3 py-4 text-center">Addresses</th>
-                  <th className="px-3 py-4 text-center">Active Orders</th>
-                  <th className="px-3 py-4 text-center">Order History</th>
+                  <th className="px-3 py-4 text-left">Location</th>
+                  <th className="px-3 py-4 text-right">Total Spend</th>
+                  <th className="px-3 py-4 text-center">Total Orders</th>
                   <th className="px-3 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
                 {filteredCustomers.map((c) => {
-                  const { current, history } = splitOrders(c);
                   const code = formatCustomerCode(c.customerNumber);
+                  const loc = getCustomerLocation(c);
+                  const totalSpend = getCustomerTotalSpend(c);
+                  const totalOrders = getCustomerTotalOrders(c);
                   return (
                     <tr key={c.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-3 py-4">
@@ -526,14 +557,22 @@ export default function Customers() {
                         <p className="text-xs text-black mt-0.5">{c.email || "N.A"}</p>
                         <p className="text-xs text-black mt-0.5">{c.dateOfBirth || "N.A"}</p>
                       </td>
-                      <td className="px-3 py-4 text-center">
-                        <CountBadge count={c.addresses?.length ?? 0} />
+                      <td className="px-3 py-4">
+                        {loc.pincode || loc.city || loc.name ? (
+                          <>
+                            {loc.pincode && <p className="text-sm font-medium text-black">{loc.pincode}</p>}
+                            {loc.city && <p className="text-xs text-black mt-0.5">{loc.city}</p>}
+                            {loc.name && <p className="text-xs text-black mt-0.5">{loc.name}</p>}
+                          </>
+                        ) : (
+                          <span className="text-sm text-black">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-4 text-right">
+                        <span className="text-sm font-medium text-black">{formatRupees(totalSpend)}</span>
                       </td>
                       <td className="px-3 py-4 text-center">
-                        <CountBadge count={current.length} activeColor />
-                      </td>
-                      <td className="px-3 py-4 text-center">
-                        <CountBadge count={history.length} historyColor />
+                        <span className="text-sm text-black">{totalOrders}</span>
                       </td>
                       <td className="px-3 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
