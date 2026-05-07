@@ -53,7 +53,7 @@ function getBase() {
 }
 
 const CUSTOMERS_QUERY_KEY = ["customers"] as const;
-const ACTIVE_ORDER_STATUSES = new Set(["pending", "confirmed", "preparing", "out_for_delivery"]);
+const ACTIVE_ORDER_STATUSES = new Set(["pending", "confirmed", "out_for_delivery"]);
 
 interface Customer {
   id: string;
@@ -238,10 +238,11 @@ function getStatusStyle(status: any) {
 }
 
 function splitOrders(customer: Customer) {
-  const orders = Array.isArray(customer.orders) ? customer.orders : [];
-  const current = Array.isArray(customer.currentOrders) ? customer.currentOrders : orders.filter((o) => ACTIVE_ORDER_STATUSES.has(normalize(o?.status)));
-  const history = Array.isArray(customer.orderHistory) ? customer.orderHistory : orders.filter((o) => !ACTIVE_ORDER_STATUSES.has(normalize(o?.status)));
-  return { current, history, all: orders };
+  const rawOrders = Array.isArray(customer.orders) ? customer.orders : [];
+  const current = Array.isArray(customer.currentOrders) ? customer.currentOrders : rawOrders.filter((o) => ACTIVE_ORDER_STATUSES.has(normalize(o?.status)));
+  const history = Array.isArray(customer.orderHistory) ? customer.orderHistory : rawOrders.filter((o) => !ACTIVE_ORDER_STATUSES.has(normalize(o?.status)));
+  const all = (current.length + history.length) > 0 ? [...current, ...history] : rawOrders;
+  return { current, history, all };
 }
 
 function stringifyValue(value: any) {
@@ -770,39 +771,41 @@ function CustomerDetailPage({
           Failed to load customer details. Please go back and try again.
         </div>
       ) : !fullCustomer ? null : (
-        <div className="space-y-5">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="flex items-start gap-4">
-                <Avatar className="h-14 w-14 flex-shrink-0">
-                  <AvatarFallback className={`text-lg font-bold ${getAvatarColor(fullCustomer.name || "?")}`}>
-                    {fullCustomer.name ? getInitials(fullCustomer.name) : "?"}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <h2 className="text-xl font-bold text-black">{fullCustomer.name || "Unnamed customer"}</h2>
-                  <p className="text-sm font-semibold text-black mt-0.5">{formatCustomerCode(fullCustomer.customerNumber)}</p>
-                  <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-black">
-                    <span className="inline-flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-gray-400" />{fullCustomer.phone || "N.A"}</span>
-                    <span className="inline-flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-gray-400" />{fullCustomer.email || "N.A"}</span>
-                    {fullCustomer.dateOfBirth && (
-                      <span className="inline-flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-gray-400" />DOB: {fullCustomer.dateOfBirth}</span>
-                    )}
-                  </div>
-                  <p className="mt-1.5 text-xs text-black">Customer since {formatDate(fullCustomer.createdAt)}</p>
+        <div className="space-y-4">
+          {/* Profile header card */}
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-6 py-5 flex flex-wrap items-start gap-4">
+              <Avatar className="h-14 w-14 flex-shrink-0">
+                <AvatarFallback className={`text-lg font-bold ${getAvatarColor(fullCustomer.name || "?")}`}>
+                  {fullCustomer.name ? getInitials(fullCustomer.name) : "?"}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-bold text-[#162B4D]">{fullCustomer.name || "Unnamed customer"}</h2>
+                  <span className="text-xs font-semibold text-[#364F9F] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">{formatCustomerCode(fullCustomer.customerNumber)}</span>
                 </div>
+                <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1.5 text-sm text-gray-600">
+                  <span className="inline-flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-[#F05B4E]" />{fullCustomer.phone || "N.A"}</span>
+                  <span className="inline-flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-gray-400" />{fullCustomer.email || "N.A"}</span>
+                  {fullCustomer.dateOfBirth && (
+                    <span className="inline-flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-gray-400" />DOB: {fullCustomer.dateOfBirth}</span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-gray-400">Customer since {formatDate(fullCustomer.createdAt)}</p>
               </div>
+            </div>
+            {/* Stats strip — no card backgrounds, just dividers */}
+            <div className="border-t border-gray-100 grid grid-cols-2 sm:grid-cols-5 divide-x divide-gray-100">
+              <SummaryCard label="Addresses" value={fullCustomer.addresses?.length ?? 0} icon={Home} color="text-[#364F9F]" />
+              <SummaryCard label="Active Orders" value={current.length} icon={Clock} color="text-indigo-500" />
+              <SummaryCard label="Order History" value={history.length} icon={CheckCircle2} color="text-emerald-500" />
+              <SummaryCard label="All Orders" value={all.length} icon={ClipboardList} color="text-amber-500" />
+              <SummaryCard label="Total Spend" value={formatRupees(totalSpend)} icon={CreditCard} color="text-[#F05B4E]" />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <SummaryCard label="Addresses" value={fullCustomer.addresses?.length ?? 0} icon={Home} color="text-blue-600" />
-            <SummaryCard label="Active Orders" value={current.length} icon={Clock} color="text-indigo-600" />
-            <SummaryCard label="Order History" value={history.length} icon={CheckCircle2} color="text-green-600" />
-            <SummaryCard label="All Orders" value={all.length} icon={ClipboardList} color="text-amber-600" />
-            <SummaryCard label="Total Spend" value={formatRupees(totalSpend)} icon={CreditCard} color="text-emerald-600" />
-          </div>
-
+          {/* Personal details */}
           <DetailSection title="Personal & Account Details" icon={UserRound}>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               <InfoRow label="Name" value={fullCustomer.name} />
@@ -815,6 +818,7 @@ function CustomerDetailPage({
             </div>
           </DetailSection>
 
+          {/* Addresses */}
           <DetailSection title={`Saved Addresses (${fullCustomer.addresses?.length ?? 0})`} icon={MapPin}>
             {fullCustomer.addresses?.length ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -825,14 +829,17 @@ function CustomerDetailPage({
             ) : <EmptyPanel text="No saved addresses found for this customer." />}
           </DetailSection>
 
+          {/* Active Orders */}
           <CollapsibleDetailSection title={`Active Orders (${current.length})`} icon={Clock} defaultOpen={current.length > 0 && current.length <= 5}>
             <OrderList orders={current} empty="No active orders found for this customer." />
           </CollapsibleDetailSection>
 
-          <CollapsibleDetailSection title={`Order History (${history.length})`} icon={ShoppingBag} defaultOpen={false}>
+          {/* Order History */}
+          <CollapsibleDetailSection title={`Order History (${history.length})`} icon={ShoppingBag} defaultOpen={history.length > 0 && history.length <= 5}>
             <OrderList orders={history} empty="No completed or past orders found for this customer." />
           </CollapsibleDetailSection>
 
+          {/* Used Coupons */}
           <CollapsibleDetailSection title={`Used Coupons (${fullCustomer.usedCoupons?.length ?? 0})`} icon={Tag} defaultOpen>
             <UsedCouponsList coupons={fullCustomer.usedCoupons ?? []} />
           </CollapsibleDetailSection>
@@ -844,10 +851,10 @@ function CustomerDetailPage({
 
 function SummaryCard({ label, value, icon: Icon, color }: { label: string; value: any; icon: any; color: string }) {
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-      <Icon className={`w-4 h-4 ${color} mb-2`} />
-      <p className="text-lg font-bold text-black">{value}</p>
-      <p className="text-xs text-black font-medium">{label}</p>
+    <div className="flex flex-col items-center justify-center py-4 px-2 gap-0.5">
+      <Icon className={`w-4 h-4 ${color} mb-1`} />
+      <p className="text-xl font-bold text-[#162B4D]">{value}</p>
+      <p className="text-[11px] text-gray-500 font-medium text-center">{label}</p>
     </div>
   );
 }
@@ -1111,24 +1118,6 @@ function OrderList({ orders, empty }: { orders: any[]; empty: string }) {
   );
 }
 
-function OrderCardCompact({ order, index }: { order: any; index: number }) {
-  const ref = shortOrderRef(order, index);
-  const items = Array.isArray(order.items) ? order.items : [];
-  return (
-    <div className="rounded-xl border border-gray-100 bg-white p-3">
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <p className="font-bold text-black text-xs flex items-center gap-1.5"><Package className="w-3.5 h-3.5 text-gray-400" />{ref}</p>
-        <span className={`inline-flex border items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold capitalize ${getStatusStyle(order.status)}`}>{statusLabel(order.status)}</span>
-      </div>
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] text-black">{formatDateTime(order.createdAt || order.orderDate)}</p>
-        <span className="text-xs font-bold text-black">{formatRupees(getOrderTotal(order))}</span>
-      </div>
-      {items.length > 0 && <p className="text-[10px] text-black mt-1.5 truncate">{items.map((i: any) => i.name || i.productName || "Item").join(", ")}</p>}
-    </div>
-  );
-}
-
 function shortOrderRef(order: any, index: number) {
   const id = getOrderId(order);
   if (order.orderNumber) return `#${order.orderNumber}`;
@@ -1136,53 +1125,213 @@ function shortOrderRef(order: any, index: number) {
   return `Order ${index + 1}`;
 }
 
-function OrderCard({ order, index }: { order: any; index: number }) {
-  const items = Array.isArray(order.items) ? order.items : [];
+function getOrderBillAddress(order: any): string {
+  const addr = order.deliveryAddress || order.address;
+  if (!addr) return "";
+  if (typeof addr === "string") return addr;
+  const parts = [
+    addr.houseNo || addr.flatNo || addr.house || addr.building,
+    addr.street || addr.addressLine1 || addr.area || addr.locality,
+    addr.landmark ? `Near ${addr.landmark}` : "",
+    addr.city,
+    addr.pincode || addr.zipCode,
+  ].filter(Boolean);
+  return parts.join(", ");
+}
+
+function OrderCardCompact({ order, index }: { order: any; index: number }) {
   const ref = shortOrderRef(order, index);
+  const items = Array.isArray(order.items) ? order.items : [];
+  const totalAmt = Number(order.total ?? order.grandTotal ?? order.totalAmount ?? getOrderTotal(order));
+  const subHubName = order.subHubName ?? order.subHub ?? order.location ?? "";
+
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden text-sm" style={{ fontFamily: "'Poppins', sans-serif" }}>
+      {/* Invoice header */}
+      <div className="px-5 pt-4 pb-3 flex items-start justify-between gap-3 border-b border-gray-100">
         <div>
-          <p className="font-bold text-black flex items-center gap-2"><Package className="w-4 h-4 text-gray-400" />{ref}</p>
-          <p className="text-xs text-black mt-1">{formatDateTime(order.createdAt || order.orderDate || order.date)}</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-0.5">Tax Invoice</p>
+          <p className="text-xs font-bold text-[#162B4D]">FishTokri{subHubName ? ` · ${subHubName}` : ""}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`inline-flex border items-center px-2 py-1 rounded-full text-xs font-semibold capitalize ${getStatusStyle(order.status)}`}>{statusLabel(order.status)}</span>
-          <span className="inline-flex border border-gray-200 bg-gray-50 text-black items-center px-2 py-1 rounded-full text-xs font-semibold">{formatRupees(getOrderTotal(order))}</span>
+        <div className="text-right flex-shrink-0">
+          <p className="text-xs font-bold text-[#364F9F]">{ref}</p>
+          <p className="text-[10px] text-gray-400">{formatDateTime(order.createdAt ?? order.orderDate)}</p>
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-        <div className="space-y-2">
-          <OrderMeta icon={Truck} label="Delivery" value={[order.deliveryType, order.timeslotLabel, order.deliveryArea].filter(Boolean).join(" · ") || "—"} />
-          <OrderMeta icon={MapPin} label="Address" value={order.address || addressText(order.deliveryAddress) || "—"} />
-          <OrderMeta icon={CreditCard} label="Payment" value={[order.paymentMethod, order.paymentStatus].filter(Boolean).join(" · ") || "—"} />
-        </div>
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-black opacity-50 mb-2">Items ({items.length})</p>
-          {items.length ? (
-            <div className="space-y-1.5">
-              {items.map((item: any, itemIndex: number) => (
-                <div key={itemIndex} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs">
-                  <span className="font-medium text-black break-words">{item.name || item.productName || item.title || `Item ${itemIndex + 1}`}</span>
-                  <span className="text-black whitespace-nowrap">x{item.quantity ?? 1} · {formatRupees(item.price ?? item.total ?? 0)}</span>
-                </div>
-              ))}
-            </div>
-          ) : <p className="text-xs text-black">No item details saved.</p>}
-        </div>
+      <div className="px-5 py-3 flex items-center justify-between gap-2">
+        <span className={`inline-flex border items-center px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${getStatusStyle(order.status)}`}>{statusLabel(order.status)}</span>
+        <span className="text-sm font-bold text-[#162B4D]">{formatRupees(totalAmt)}</span>
       </div>
-      {order.notes && <p className="mt-3 rounded-lg bg-amber-50 text-amber-700 text-xs p-2">Notes: {order.notes}</p>}
+      {items.length > 0 && (
+        <div className="px-5 pb-3">
+          <p className="text-[10px] text-gray-400 truncate">{items.map((i: any) => i.name || i.productName || "Item").join(", ")}</p>
+        </div>
+      )}
     </div>
   );
 }
 
-function OrderMeta({ icon: Icon, label, value }: { icon: any; label: string; value: any }) {
+function OrderCard({ order, index }: { order: any; index: number }) {
+  const ref = shortOrderRef(order, index);
+  const items = Array.isArray(order.items) ? order.items : [];
+  const grandTotal = order.total ?? order.grandTotal ?? order.totalAmount;
+  const subtotal = order.subtotal ?? order.subTotal;
+  const deliveryFee = order.deliveryFee ?? order.deliveryCharge ?? null;
+  const slotCharge = order.slotCharge ?? order.timeslotCharge ?? null;
+  const instantDelivery = order.instantDelivery ?? order.instantDeliveryCharge ?? null;
+  const couponDiscount = order.couponDiscount ?? order.discount ?? 0;
+  const couponCode = order.couponCode ?? order.coupon ?? "";
+  const tax = order.tax ?? order.gst ?? order.taxAmount ?? null;
+  const notes = order.notes ?? order.orderNotes ?? "";
+  const billName = order.customerName ?? order.name ?? "";
+  const billPhone = order.phone ?? order.customerPhone ?? order.mobile ?? "";
+  const billAddr = getOrderBillAddress(order);
+  const paymentMethod = order.paymentMethod ?? order.payment ?? "";
+  const paymentStatus = order.paymentStatus ?? "";
+  const paidAmount = Number(order.paidAmount ?? order.paid ?? 0);
+  const totalAmt = Number(grandTotal ?? getOrderTotal(order));
+  const dueAmount = Math.max(0, totalAmt - paidAmount);
+  const subHubName = order.subHubName ?? order.subHub ?? order.location ?? "";
+  const isPaid = paymentStatus && normalize(paymentStatus) === "paid";
+  const isUnpaid = paymentStatus && ["unpaid", "pending", "due"].includes(normalize(paymentStatus));
+
+  const computedSubtotal = subtotal != null
+    ? Number(subtotal)
+    : items.reduce((s: number, i: any) => s + (Number(i.price ?? 0) * Number(i.quantity ?? 1)), 0);
+
   return (
-    <div className="flex items-start gap-2 text-black">
-      <Icon className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-wide text-black opacity-50">{label}</p>
-        <p className="text-sm text-black whitespace-pre-wrap break-words">{stringifyValue(value)}</p>
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden" style={{ fontFamily: "'Poppins', sans-serif" }}>
+      {/* ── Invoice header ── */}
+      <div className="px-5 pt-5 pb-4 flex items-start justify-between gap-4 border-b border-gray-100">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Tax Invoice</p>
+          <p className="text-xs text-gray-500 mt-0.5">FishTokri{subHubName ? ` · ${subHubName}` : ""}</p>
+        </div>
+        <div className="text-right flex items-start gap-3">
+          <div>
+            <p className="text-sm font-bold text-[#364F9F]">{ref}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(order.createdAt ?? order.orderDate)}</p>
+          </div>
+          <span className={`inline-flex border items-center px-2.5 py-1 rounded-full text-xs font-semibold capitalize flex-shrink-0 ${getStatusStyle(order.status)}`}>{statusLabel(order.status)}</span>
+        </div>
+      </div>
+
+      {/* ── Bill To ── */}
+      {(billName || billPhone || billAddr) && (
+        <div className="px-5 py-4 border-b border-gray-100">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Bill To</p>
+          {billName && <p className="text-sm font-bold text-[#162B4D]">{billName}</p>}
+          {billPhone && <p className="text-xs text-gray-500 mt-0.5">{billPhone}</p>}
+          {billAddr && <p className="text-xs text-gray-500 mt-0.5">{billAddr}</p>}
+        </div>
+      )}
+
+      {/* ── Items table ── */}
+      {items.length > 0 && (
+        <div className="px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2 pb-2 border-b border-dashed border-gray-200">
+            <span className="flex-1">Item</span>
+            <span className="w-10 text-center">Qty</span>
+            <span className="w-20 text-right">Rate</span>
+            <span className="w-20 text-right">Amount</span>
+          </div>
+          <div className="space-y-2">
+            {items.map((item: any, i: number) => {
+              const name = item.name ?? item.productName ?? item.title ?? `Item ${i + 1}`;
+              const qty = Number(item.quantity ?? 1);
+              const rate = Number(item.price ?? item.rate ?? item.unitPrice ?? 0);
+              const amount = Number(item.total ?? item.amount ?? (rate * qty));
+              return (
+                <div key={i} className="flex items-start text-sm">
+                  <span className="flex-1 text-[#162B4D] font-medium pr-2">{name}</span>
+                  <span className="w-10 text-center text-gray-600">{qty}</span>
+                  <span className="w-20 text-right text-gray-600">{formatRupees(rate)}</span>
+                  <span className="w-20 text-right font-medium text-[#162B4D]">{formatRupees(amount)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Totals breakdown ── */}
+      <div className="px-5 py-4 border-b border-gray-100 space-y-1.5 text-sm">
+        <div className="flex justify-between text-gray-600">
+          <span>Subtotal</span>
+          <span>{formatRupees(computedSubtotal)}</span>
+        </div>
+        {deliveryFee != null && (
+          <div className="flex justify-between text-gray-600">
+            <span>Delivery Fee</span>
+            <span className={Number(deliveryFee) === 0 ? "text-emerald-600 font-medium" : ""}>{Number(deliveryFee) === 0 ? "FREE" : formatRupees(deliveryFee)}</span>
+          </div>
+        )}
+        {slotCharge != null && Number(slotCharge) > 0 && (
+          <div className="flex justify-between text-gray-600">
+            <span>Slot Charge</span>
+            <span>+ {formatRupees(slotCharge)}</span>
+          </div>
+        )}
+        {instantDelivery != null && Number(instantDelivery) > 0 && (
+          <div className="flex justify-between text-gray-600">
+            <span>Instant Delivery</span>
+            <span>+ {formatRupees(instantDelivery)}</span>
+          </div>
+        )}
+        {couponDiscount > 0 && (
+          <div className="flex justify-between text-emerald-600 font-medium">
+            <span>Coupon Discount{couponCode ? ` (${couponCode})` : ""}</span>
+            <span>−{formatRupees(couponDiscount)}</span>
+          </div>
+        )}
+        {tax != null && (
+          <div className="flex justify-between text-gray-600">
+            <span>GST {typeof tax === "number" && tax <= 30 ? `(${tax}%)` : ""}</span>
+            <span>{typeof tax === "number" && tax <= 30 ? "Included" : formatRupees(tax)}</span>
+          </div>
+        )}
+        <div className="flex justify-between pt-2 mt-1 border-t border-gray-200 font-bold text-[#162B4D]">
+          <span>Grand Total</span>
+          <span className="text-[#F05B4E]">{formatRupees(totalAmt)}</span>
+        </div>
+      </div>
+
+      {/* ── Payment ── */}
+      {(paymentMethod || paymentStatus) && (
+        <div className="px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Payment</p>
+            {paymentStatus && (
+              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${isPaid ? "bg-emerald-50 text-emerald-700 border-emerald-200" : isUnpaid ? "bg-red-50 text-red-600 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{paymentStatus}</span>
+            )}
+          </div>
+          {paymentMethod && <p className="text-xs text-gray-500 mb-3">{paymentMethod}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Paid</p>
+              <p className="text-base font-bold text-[#162B4D] mt-0.5">{formatRupees(paidAmount)}</p>
+            </div>
+            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Due</p>
+              <p className={`text-base font-bold mt-0.5 ${dueAmount > 0 ? "text-[#F05B4E]" : "text-[#162B4D]"}`}>{formatRupees(dueAmount)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Notes ── */}
+      {notes && (
+        <div className="px-5 py-3 border-b border-gray-100">
+          <div className="rounded-lg bg-[#162B4D] text-white px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-1">Order Notes</p>
+            <p className="text-xs">{notes}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Footer ── */}
+      <div className="px-5 py-3 text-center">
+        <p className="text-[11px] text-gray-400">Thank you for shopping with FishTokri!</p>
       </div>
     </div>
   );
