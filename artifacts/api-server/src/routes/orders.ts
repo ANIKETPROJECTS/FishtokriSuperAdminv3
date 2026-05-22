@@ -680,6 +680,22 @@ router.post("/", async (req: ScopedRequest, res) => {
       }
     }
 
+    // Deduct wallet balance if customer paid (partially or fully) using wallet.
+    const walletPayments = (orderDoc.payments ?? []).filter((p: any) => p.mode === "wallet");
+    const walletUsed = walletPayments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
+    if (walletUsed > 0 && resolvedCustomerId) {
+      try {
+        const cCol = await getCustomersCollection();
+        await cCol.updateOne(
+          { _id: toId(resolvedCustomerId) },
+          { $inc: { walletBalance: -walletUsed } }
+        );
+        req.log.info({ customerId: resolvedCustomerId, deducted: walletUsed }, "Wallet deducted on order create");
+      } catch (e) {
+        req.log.error({ err: e }, "Failed to deduct wallet on order create");
+      }
+    }
+
     res.status(201).json({ order: { ...orderDoc, _id: result.insertedId } });
   } catch (err) {
     req.log.error({ err }, "Failed to create order");

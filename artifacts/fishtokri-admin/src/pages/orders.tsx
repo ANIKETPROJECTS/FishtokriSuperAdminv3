@@ -2890,7 +2890,7 @@ export default function Orders() {
               {/* ── Payment ── */}
               <div className="flex-shrink-0 border-t border-gray-100 px-3 py-2">
                 <p className="text-sm font-normal text-gray-900 flex items-center gap-1.5 mb-1.5"><img src="/icon-payment.png" className="w-4 h-4 object-contain" alt="" />Payment</p>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button type="button"
                     onClick={() => { setPaymentStatus("paid"); setPaymentEntries([{ mode: "upi", amount: String(newOrderTotal || 0), reference: "" }]); }}
                     className={`px-4 py-1.5 rounded-lg border-2 text-sm font-semibold transition-all ${paymentStatus === "paid" && paymentEntries[0]?.mode === "upi" ? "border-[#1A56DB] bg-[#1A56DB] text-white" : "border-gray-200 text-gray-600 hover:bg-blue-50 hover:border-blue-300"}`}
@@ -2899,6 +2899,21 @@ export default function Orders() {
                     onClick={() => { setPaymentStatus("unpaid"); setPaymentEntries([{ mode: "cash", amount: "0", reference: "" }]); }}
                     className={`px-4 py-1.5 rounded-lg border-2 text-sm font-semibold transition-all ${paymentStatus === "unpaid" ? "border-amber-400 bg-amber-50 text-amber-700" : "border-gray-200 text-gray-600 hover:bg-amber-50 hover:border-amber-300"}`}
                   >COD</button>
+                  {Number(chosenCustomer?.walletBalance) > 0 && (
+                    <button type="button"
+                      onClick={() => {
+                        const walletAmt = Math.min(Number(chosenCustomer!.walletBalance), newOrderTotal);
+                        setPaymentStatus(walletAmt >= newOrderTotal ? "paid" : "partial");
+                        setPaymentEntries([{ mode: "wallet", amount: String(walletAmt), reference: "" }]);
+                      }}
+                      className={`px-4 py-1.5 rounded-lg border-2 text-sm font-semibold transition-all leading-tight ${paymentEntries[0]?.mode === "wallet" ? "border-blue-500 bg-blue-500 text-white" : "border-gray-200 text-gray-600 hover:bg-blue-50 hover:border-blue-300"}`}
+                    >
+                      <span className="block">Wallet</span>
+                      <span className={`block text-[10px] font-normal ${paymentEntries[0]?.mode === "wallet" ? "text-blue-100" : "text-blue-500"}`}>
+                        ₹{Number(chosenCustomer!.walletBalance).toLocaleString("en-IN")} avail.
+                      </span>
+                    </button>
+                  )}
                 </div>
               </div>
 
