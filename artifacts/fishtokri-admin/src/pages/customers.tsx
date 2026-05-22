@@ -797,19 +797,14 @@ function CustomerDetailPage({
               </div>
             </div>
             {/* Stats strip — no card backgrounds, just dividers */}
-            <div className="border-t border-gray-100 grid grid-cols-2 sm:grid-cols-5 divide-x divide-gray-100">
+            <div className="border-t border-gray-100 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-gray-100">
               <SummaryCard label="Addresses" value={fullCustomer.addresses?.length ?? 0} icon={Home} color="text-[#364F9F]" />
               <SummaryCard label="Active Orders" value={current.length} icon={Clock} color="text-indigo-500" />
               <SummaryCard label="Order History" value={history.length} icon={CheckCircle2} color="text-emerald-500" />
               <SummaryCard label="All Orders" value={all.length} icon={ClipboardList} color="text-amber-500" />
               <SummaryCard label="Total Spend" value={formatRupees(totalSpend)} icon={CreditCard} color="text-[#F05B4E]" />
+              <SummaryCard label="Wallet Balance" value={formatRupees(Number(fullCustomer.walletBalance) || 0)} icon={Wallet} color="text-blue-500" />
             </div>
-            {Number(fullCustomer.walletBalance) > 0 && (
-              <div className="border-t border-blue-100 bg-blue-50 px-6 py-2.5 flex items-center gap-2">
-                <Wallet className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                <span className="text-sm font-semibold text-blue-700">FishTokri Wallet Balance: ₹{Number(fullCustomer.walletBalance).toLocaleString("en-IN")}</span>
-              </div>
-            )}
           </div>
 
           {/* Personal details */}
