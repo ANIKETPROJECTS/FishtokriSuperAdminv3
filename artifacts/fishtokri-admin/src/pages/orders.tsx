@@ -1241,7 +1241,7 @@ export default function Orders() {
     // Validate scheduling (only for delivery orders — takeaway is instant for today)
     if (orderDeliveryType === "delivery") {
       if (orderScheduleType === "slot" && activeTimeslots.length > 0 && !selectedTimeslotId) {
-        toast({ title: "Pick a delivery slot", description: "Select a time slot or switch to instant delivery.", variant: "destructive" });
+        toast({ title: "Pick a delivery slot", description: "Please select a time slot for this order.", variant: "destructive" });
         return;
       }
       if (!orderDate) {
@@ -1733,7 +1733,7 @@ export default function Orders() {
     skipPaymentRecomputeRef.current = true;
     setUseWallet(hadWallet);
     // Schedule
-    setOrderScheduleType(o.scheduleType === "instant" ? "instant" : "slot");
+    setOrderScheduleType("slot");
     if (o.deliveryDate) setOrderDate(String(o.deliveryDate).slice(0, 10));
     if (o.timeslotId) setSelectedTimeslotId(String(o.timeslotId));
   }, [allCustomers]);
@@ -2837,15 +2837,11 @@ export default function Orders() {
                 <div className="px-4 pt-3 pb-3">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm font-normal text-gray-900 flex items-center gap-1.5"><img src="/icon-schedule.png" className="w-4 h-4 object-contain" alt="" />Schedule</p>
-                    <div className="flex items-center gap-0.5 bg-gray-100 rounded-full p-0.5">
-                      <button onClick={() => setOrderScheduleType("instant")} className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${orderScheduleType === "instant" ? "bg-amber-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Instant</button>
-                      <button onClick={() => setOrderScheduleType("slot")} className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${orderScheduleType === "slot" ? "bg-[#1A56DB] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>By Slot</button>
-                    </div>
                   </div>
                   <Input type="date" value={orderDate} min={new Date().toISOString().slice(0, 10)} onChange={(e) => { setOrderDate(e.target.value); setSelectedTimeslotId(""); }} className="h-8 text-sm w-full mb-2" />
                   {orderScheduleType === "slot" && (
                     loadingTimeslots ? <p className="text-xs text-gray-400">Loading slots...</p>
-                    : activeTimeslots.length === 0 ? <p className="text-xs text-amber-600 flex items-center gap-1"><Zap className="w-3 h-3" />No slots — will be instant</p>
+                    : activeTimeslots.length === 0 ? <p className="text-xs text-amber-600 flex items-center gap-1"><Zap className="w-3 h-3" />No slots available for this date</p>
                     : (
                       <div className="grid grid-cols-2 gap-1.5">
                         {activeTimeslots.map((t) => {
@@ -2867,7 +2863,6 @@ export default function Orders() {
                       </div>
                     )
                   )}
-                  {orderScheduleType === "instant" && <p className="text-xs text-amber-700 flex items-center gap-1"><Zap className="w-3 h-3" />Dispatched as soon as possible</p>}
                 </div>
               )}
             </div>
