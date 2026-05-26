@@ -2935,7 +2935,6 @@ function CategoryModal({ isOpen, onClose, category, subHubId, onSaved, nextOrder
   );
 }
 
-type ComboNutrition = { icon: string; label: string; value: string; unit: string };
 type ComboInclude = { productId: string; label: string };
 
 function ComboModal({ isOpen, onClose, combo, subHubId, onSaved, nextOrder = 1, allItems = [] }: any) {
@@ -2953,7 +2952,6 @@ function ComboModal({ isOpen, onClose, combo, subHubId, onSaved, nextOrder = 1, 
   const [isActive, setIsActive] = useState(true);
   const [sortOrder, setSortOrder] = useState("1");
   const [includes, setIncludes] = useState<ComboInclude[]>([]);
-  const [nutrition, setNutrition] = useState<ComboNutrition[]>([]);
   const [availableProducts, setAvailableProducts] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [productSearch, setProductSearch] = useState("");
@@ -2973,16 +2971,10 @@ function ComboModal({ isOpen, onClose, combo, subHubId, onSaved, nextOrder = 1, 
         productId: String(i.productId ?? ""),
         label: i.label ?? "",
       })) : []);
-      setNutrition(Array.isArray(combo.nutrition) ? combo.nutrition.map((n: any) => ({
-        icon: n.icon ?? "",
-        label: n.label ?? "",
-        value: n.value ?? "",
-        unit: n.unit ?? "",
-      })) : []);
       setIsActive(combo.isActive !== false); setSortOrder(String(combo.sortOrder ?? 0));
     } else {
       setName(""); setDescription(""); setFullDescription(""); setDiscountedPrice(""); setOriginalPrice("");
-      setServes(""); setWeight(""); setTagsStr(""); setIncludes([]); setNutrition([]); setIsActive(true); setSortOrder(String(nextOrder));
+      setServes(""); setWeight(""); setTagsStr(""); setIncludes([]); setIsActive(true); setSortOrder(String(nextOrder));
     }
     setProductSearch(""); setSelectedCategory("all");
   }, [isOpen, combo, nextOrder]);
@@ -3006,9 +2998,6 @@ function ComboModal({ isOpen, onClose, combo, subHubId, onSaved, nextOrder = 1, 
     }
   };
 
-  const updateNutrition = (i: number, field: keyof ComboNutrition, val: string) =>
-    setNutrition(nutrition.map((n, idx) => idx === i ? { ...n, [field]: val } : n));
-
   const categoryNames = Array.from(new Set(availableProducts.map((p) => p.category).filter(Boolean)));
 
   const filteredProducts = availableProducts.filter((p) => {
@@ -3028,7 +3017,6 @@ function ComboModal({ isOpen, onClose, combo, subHubId, onSaved, nextOrder = 1, 
       discountedPrice: dp, originalPrice: op,
       discount: op > dp && dp > 0 ? Math.round(((op - dp) / op) * 100) : 0,
       includes,
-      nutrition: nutrition.map((n) => ({ icon: n.icon, label: n.label, value: n.value, unit: n.unit })),
       tags: tagsStr.split(",").map((t) => t.trim()).filter(Boolean),
       isActive, sortOrder: soNum,
     };
@@ -3139,36 +3127,6 @@ function ComboModal({ isOpen, onClose, combo, subHubId, onSaved, nextOrder = 1, 
                   })}
               </div>
             </div>
-          </section>
-
-          {/* Nutrition */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Nutrition Info ({nutrition.length})</p>
-              <button type="button" onClick={() => setNutrition([...nutrition, { icon: "", label: "", value: "", unit: "" }])}
-                className="text-xs text-[#1A56DB] font-semibold flex items-center gap-1 hover:underline">
-                <Plus className="w-3 h-3" /> Add Row
-              </button>
-            </div>
-            {nutrition.length === 0
-              ? <div className="text-center py-5 border border-dashed border-gray-200 rounded-xl text-gray-400 text-xs">No nutrition info yet. Click "Add Row" to include.</div>
-              : (
-                <div className="space-y-2">
-                  {/* Header */}
-                  <div className="grid grid-cols-[40px_1fr_80px_70px_24px] gap-1.5 px-1">
-                    {["Icon","Label","Value","Unit",""].map((h) => <span key={h} className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">{h}</span>)}
-                  </div>
-                  {nutrition.map((n, i) => (
-                    <div key={i} className="grid grid-cols-[40px_1fr_80px_70px_24px] gap-1.5 items-center">
-                      <Input value={n.icon} onChange={(e) => updateNutrition(i, "icon", e.target.value)} placeholder="🔥" className="h-8 text-sm text-center px-1" />
-                      <Input value={n.label} onChange={(e) => updateNutrition(i, "label", e.target.value)} placeholder="Calories" className="h-8 text-xs" />
-                      <Input value={n.value} onChange={(e) => updateNutrition(i, "value", e.target.value)} placeholder="220" className="h-8 text-xs" />
-                      <Input value={n.unit} onChange={(e) => updateNutrition(i, "unit", e.target.value)} placeholder="kcal" className="h-8 text-xs" />
-                      <button type="button" onClick={() => setNutrition(nutrition.filter((_, idx) => idx !== i))} className="text-gray-300 hover:text-red-500 transition-colors flex justify-center"><Trash2 className="w-3.5 h-3.5" /></button>
-                    </div>
-                  ))}
-                </div>
-              )}
           </section>
 
           {/* Tags + settings */}
