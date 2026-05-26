@@ -33,7 +33,7 @@ router.post("/", upload.single("image"), async (req, res) => {
 
     const result = await new Promise<any>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        { folder, resource_type: "image", transformation: [{ quality: "auto", fetch_format: "auto" }] },
+        { folder, resource_type: "image" },
         (err, result) => {
           if (err) reject(err);
           else resolve(result);
