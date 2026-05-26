@@ -421,6 +421,7 @@ type ExcelBarConfig = {
   onImport: () => void;
   onEdit: () => void;
   onExport: () => void;
+  onRefresh?: () => void;
   count: number;
 } | null;
 
@@ -539,9 +540,9 @@ export default function SubHubMenuAdmin() {
           )}
           <div className="flex-1" />
           <button
-            onClick={loadStats}
+            onClick={() => { loadStats(); excelBar?.onRefresh?.(); }}
             className="flex-shrink-0 p-1.5 rounded hover:bg-gray-100 transition-colors"
-            title="Refresh stats"
+            title="Refresh"
           >
             <span
               className="block w-5 h-5"
@@ -998,9 +999,9 @@ function ProductsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (
   _prodExportRef.current = handleExport;
   const _prodStableExport = useCallback(() => { _prodExportRef.current(); }, []);
   useEffect(() => {
-    onSetExcel({ busy: xlsxBusy, onImport: _prodImportClick, onEdit: _prodEditClick, onExport: _prodStableExport, count: processed.length });
+    onSetExcel({ busy: xlsxBusy, onImport: _prodImportClick, onEdit: _prodEditClick, onExport: _prodStableExport, onRefresh: load, count: processed.length });
     return () => onSetExcel(null);
-  }, [xlsxBusy, processed.length, _prodImportClick, _prodEditClick, _prodStableExport, onSetExcel]);
+  }, [xlsxBusy, processed.length, _prodImportClick, _prodEditClick, _prodStableExport, load, onSetExcel]);
 
   return (
     <div className="space-y-4">
@@ -1252,9 +1253,9 @@ function CategoriesTab({ subHubId, onRefreshStats, onSetExcel }: { subHubId: str
   _catExportRef.current = handleCatExport;
   const _catStableExport = useCallback(() => { _catExportRef.current(); }, []);
   useEffect(() => {
-    onSetExcel({ busy: xlsxBusy, onImport: _catImportClick, onEdit: _catEditClick, onExport: _catStableExport, count: processed.length });
+    onSetExcel({ busy: xlsxBusy, onImport: _catImportClick, onEdit: _catEditClick, onExport: _catStableExport, onRefresh: load, count: processed.length });
     return () => onSetExcel(null);
-  }, [xlsxBusy, processed.length, _catImportClick, _catEditClick, _catStableExport, onSetExcel]);
+  }, [xlsxBusy, processed.length, _catImportClick, _catEditClick, _catStableExport, load, onSetExcel]);
 
   return (
     <div className="space-y-4">
@@ -1530,9 +1531,9 @@ function CombosTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (cf
   _comboExportRef.current = handleComboExport;
   const _comboStableExport = useCallback(() => { _comboExportRef.current(); }, []);
   useEffect(() => {
-    onSetExcel({ busy: xlsxBusy, onImport: _comboImportClick, onEdit: _comboEditClick, onExport: _comboStableExport, count: processed.length });
+    onSetExcel({ busy: xlsxBusy, onImport: _comboImportClick, onEdit: _comboEditClick, onExport: _comboStableExport, onRefresh: load, count: processed.length });
     return () => onSetExcel(null);
-  }, [xlsxBusy, processed.length, _comboImportClick, _comboEditClick, _comboStableExport, onSetExcel]);
+  }, [xlsxBusy, processed.length, _comboImportClick, _comboEditClick, _comboStableExport, load, onSetExcel]);
 
   return (
     <div className="space-y-4">
@@ -1786,9 +1787,9 @@ function CouponsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (c
   _couponExportRef.current = handleCouponExport;
   const _couponStableExport = useCallback(() => { _couponExportRef.current(); }, []);
   useEffect(() => {
-    onSetExcel({ busy: xlsxBusy, onImport: _couponImportClick, onEdit: _couponEditClick, onExport: _couponStableExport, count: processed.length });
+    onSetExcel({ busy: xlsxBusy, onImport: _couponImportClick, onEdit: _couponEditClick, onExport: _couponStableExport, onRefresh: load, count: processed.length });
     return () => onSetExcel(null);
-  }, [xlsxBusy, processed.length, _couponImportClick, _couponEditClick, _couponStableExport, onSetExcel]);
+  }, [xlsxBusy, processed.length, _couponImportClick, _couponEditClick, _couponStableExport, load, onSetExcel]);
 
   return (
     <div className="space-y-4">
@@ -2160,9 +2161,9 @@ function SectionsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (
   _sectionExportRef.current = handleSectionExport;
   const _sectionStableExport = useCallback(() => { _sectionExportRef.current(); }, []);
   useEffect(() => {
-    onSetExcel({ busy: xlsxBusy, onImport: _sectionImportClick, onEdit: _sectionEditClick, onExport: _sectionStableExport, count: processed.length });
+    onSetExcel({ busy: xlsxBusy, onImport: _sectionImportClick, onEdit: _sectionEditClick, onExport: _sectionStableExport, onRefresh: load, count: processed.length });
     return () => onSetExcel(null);
-  }, [xlsxBusy, processed.length, _sectionImportClick, _sectionEditClick, _sectionStableExport, onSetExcel]);
+  }, [xlsxBusy, processed.length, _sectionImportClick, _sectionEditClick, _sectionStableExport, load, onSetExcel]);
 
   return (
     <div className="space-y-4">
