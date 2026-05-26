@@ -1404,6 +1404,24 @@ export default function Orders() {
       setOrders(loadedOrders);
       setTotal(data.total ?? 0);
       setPages(data.pages ?? 1);
+
+      // ── Inventory deduction diagnostics (visible in browser DevTools console) ──
+      if (loadedOrders.length > 0) {
+        console.group(`[FishTokri] Orders loaded (${loadedOrders.length})`);
+        loadedOrders.forEach((o: any) => {
+          const deducted = o.inventoryDeducted === true;
+          const items = Array.isArray(o.items) ? o.items : [];
+          console.log(
+            `%c${deducted ? "✅ DEDUCTED" : "❌ NOT DEDUCTED"}%c  #${String(o._id).slice(-6).toUpperCase()}  status="${o.status}"  subHubId="${o.subHubId}"  items=${items.length}`,
+            deducted ? "color:green;font-weight:bold" : "color:red;font-weight:bold",
+            "color:inherit"
+          );
+          if (!deducted && items.length > 0) {
+            console.log("  Item fields:", Object.keys(items[0]), "| Sample:", items[0]);
+          }
+        });
+        console.groupEnd();
+      }
       // Accumulate unique sub-hubs from orders for the filter dropdown
       let changed = false;
       for (const o of loadedOrders) {

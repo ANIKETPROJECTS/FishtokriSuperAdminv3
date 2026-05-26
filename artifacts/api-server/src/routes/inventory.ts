@@ -14,6 +14,21 @@ router.use(loadScope as any);
 const MOVEMENTS_COLLECTION = "inventory_movements";
 const ADJUSTMENTS_COLLECTION = "inventory_adjustments";
 
+// ── Process-level mutex: prevents concurrent product-stock mutations from
+// overlapping reads (two simultaneous orders deducting the same product each
+// read the same stale qty and both write back qty-5 instead of qty-10).
+let _deductionBusy = false;
+async function withDeductionLock<T>(fn: () => Promise<T>): Promise<T> {
+  const start = Date.now();
+  while (_deductionBusy) {
+    if (Date.now() - start > 10_000) throw new Error("deduction lock timeout after 10s");
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  _deductionBusy = true;
+  try { return await fn(); }
+  finally { _deductionBusy = false; }
+}
+
 function toId(id: string) {
   try { return new mongoose.Types.ObjectId(id); } catch { return null; }
 }
@@ -760,6 +775,14 @@ async function expandOrderItems(
     return true;
   }
 
+  // Log the raw item keys so we can see exactly what field names the customer app sends
+  if (rawItems.length > 0) {
+    logger.info(
+      { sampleItem: rawItems[0], allKeys: Object.keys(rawItems[0] as any), totalItems: rawItems.length },
+      "expandOrderItems: raw item sample"
+    );
+  }
+
   for (const it of rawItems) {
     const qty = Math.max(0, Number(it.quantity) || 0);
     if (qty <= 0) continue;
@@ -940,6 +963,10 @@ async function applyDelta(order: OrderForSync, direction: "deduct" | "restore"):
     }
 
     const persisted = await persistBatches(products, pid, newBatches, {}, combos);
+    logger.info(
+      { orderId, direction, productId: String(pid), productName: existing.name, newStockTotal: persisted.quantity },
+      "applyDelta: stock persisted ✓"
+    );
     await movements.insertOne({
       type: direction === "deduct" ? "order_deduct" : "order_restore",
       productId: String(pid),
@@ -968,8 +995,41 @@ export async function autoDeductUndedcutedOrders(
   ordersDb: any,
   orders: Array<{ _id: any; status?: string; subHubId?: string; subHubName?: string; items?: any[]; inventoryDeducted?: boolean }>
 ): Promise<void> {
+  // Log a sample of raw order structure so we can see what customer-app orders look like
+  if (orders.length > 0) {
+    const sample = orders[0] as any;
+    logger.info(
+      {
+        totalOrders: orders.length,
+        sampleOrderId: String(sample._id),
+        sampleStatus: sample.status,
+        sampleSubHubId: sample.subHubId,
+        sampleSubHubName: sample.subHubName,
+        sampleInventoryDeducted: sample.inventoryDeducted,
+        sampleItemCount: Array.isArray(sample.items) ? sample.items.length : "N/A",
+        sampleItemFields: Array.isArray(sample.items) && sample.items.length > 0
+          ? Object.keys(sample.items[0])
+          : [],
+        sampleItem0: Array.isArray(sample.items) && sample.items.length > 0
+          ? sample.items[0]
+          : null,
+        allOrderIds: orders.map((o) => String(o._id)),
+        allStatuses: orders.map((o) => o.status),
+        allDeductedFlags: orders.map((o) => (o as any).inventoryDeducted),
+      },
+      "autoDeductUndedcutedOrders: called"
+    );
+  } else {
+    logger.info({ totalOrders: 0 }, "autoDeductUndedcutedOrders: called with empty list");
+    return;
+  }
+
   const candidates = orders.filter(
     (o) => ACTIVE_STATUSES.has(String(o.status ?? "").toLowerCase()) && o.inventoryDeducted !== true
+  );
+  logger.info(
+    { candidateCount: candidates.length, skippedCount: orders.length - candidates.length },
+    "autoDeductUndedcutedOrders: candidate filter"
   );
   if (candidates.length === 0) return;
 
@@ -981,22 +1041,29 @@ export async function autoDeductUndedcutedOrders(
         { $set: { inventoryDeducted: true } },
         { returnDocument: "before" }
       );
-      if (!claimed) continue; // another request already claimed it
-      // Run the actual stock deduction
-      const deducted = await applyDelta(
-        { _id: order._id, subHubId: order.subHubId, subHubName: order.subHubName, status: order.status, items: order.items },
-        "deduct"
+      if (!claimed) {
+        logger.info({ orderId: String(order._id) }, "autoDeductUndedcutedOrders: already claimed — skipping");
+        continue;
+      }
+      // Serialize stock mutations so two orders for the same product don't both
+      // read stale qty and each write back qty-5 instead of the correct qty-10.
+      const deducted = await withDeductionLock(() =>
+        applyDelta(
+          { _id: order._id, subHubId: order.subHubId, subHubName: order.subHubName, status: order.status, items: order.items },
+          "deduct"
+        )
       );
-      // If nothing was actually deducted, revert the flag so it can be retried
       if (deducted === 0) {
+        logger.warn({ orderId: String(order._id) }, "autoDeductUndedcutedOrders: applyDelta returned 0 — reverting flag for retry");
         await ordersDb.collection("orders").updateOne(
           { _id: order._id },
           { $set: { inventoryDeducted: false } }
         );
+      } else {
+        logger.info({ orderId: String(order._id), deducted }, "autoDeductUndedcutedOrders: deduction successful ✓");
       }
     } catch (err) {
       logger.error({ err, orderId: String(order._id) }, "autoDeductUndedcutedOrders: failed to deduct inventory");
-      // Revert the flag so it can be retried next time
       try {
         await ordersDb.collection("orders").updateOne(
           { _id: order._id },
@@ -1011,7 +1078,7 @@ export async function autoDeductUndedcutedOrders(
 
 export async function applyOrderInventoryOnCreate(order: OrderForSync) {
   if (!orderShouldDeduct(order)) return false;
-  const deducted = await applyDelta(order, "deduct");
+  const deducted = await withDeductionLock(() => applyDelta(order, "deduct"));
   return deducted > 0;
 }
 
@@ -1023,11 +1090,25 @@ export async function applyOrderInventoryOnCreate(order: OrderForSync) {
 export async function runInventoryBackgroundDeduction(): Promise<void> {
   try {
     const conn = await getSubHubDbConnection("orders");
-    const undeducted = await conn.db.collection("orders")
-      .find({ status: { $in: [...ACTIVE_STATUSES] }, inventoryDeducted: { $ne: true } })
+    // Fetch ALL non-deducted orders regardless of status case — autoDeductUndedcutedOrders
+    // re-filters using .toLowerCase() so it handles "Pending", "pending", etc.
+    const candidates = await conn.db.collection("orders")
+      .find({ inventoryDeducted: { $ne: true } })
       .sort({ createdAt: -1 })
-      .limit(100)
+      .limit(200)
       .toArray();
+
+    // Filter in JS so case differences in status ("Pending" vs "pending") don't cause misses
+    const undeducted = candidates.filter((o: any) =>
+      ACTIVE_STATUSES.has(String(o.status ?? "").toLowerCase())
+    );
+
+    logger.info(
+      { candidateCount: candidates.length, undeductedCount: undeducted.length,
+        statuses: [...new Set(candidates.map((o: any) => o.status))] },
+      "runInventoryBackgroundDeduction: scan complete"
+    );
+
     if (undeducted.length === 0) return;
     logger.info({ count: undeducted.length }, "runInventoryBackgroundDeduction: processing undeducted orders");
     await autoDeductUndedcutedOrders(conn.db, undeducted as any[]);
@@ -1055,25 +1136,60 @@ function itemsSignature(items: any): string {
 export async function applyOrderInventoryOnUpdate(prev: OrderForSync, next: OrderForSync, wasDeducted: boolean) {
   const wantsDeducted = orderShouldDeduct(next);
   if (!wasDeducted && wantsDeducted) {
-    await applyDelta(next, "deduct");
+    await withDeductionLock(() => applyDelta(next, "deduct"));
     return true;
   }
   if (wasDeducted && !wantsDeducted) {
-    // Restore using the previous items snapshot (in case items changed)
-    await applyDelta({ ...prev, _id: next._id }, "restore");
+    await withDeductionLock(() => applyDelta({ ...prev, _id: next._id }, "restore"));
     return false;
   }
   if (wasDeducted && wantsDeducted) {
-    // Both active: if items or sub-hub changed, re-balance by restoring prev and deducting next.
     const prevSig = `${prev?.subHubId ?? ""}::${itemsSignature((prev as any)?.items)}`;
     const nextSig = `${next?.subHubId ?? ""}::${itemsSignature((next as any)?.items)}`;
     if (prevSig !== nextSig) {
-      await applyDelta({ ...prev, _id: next._id }, "restore");
-      await applyDelta(next, "deduct");
+      await withDeductionLock(async () => {
+        await applyDelta({ ...prev, _id: next._id }, "restore");
+        await applyDelta(next, "deduct");
+      });
     }
     return true;
   }
   return wasDeducted;
 }
+
+/**
+ * POST /api/inventory/reset-deduction-flags
+ * Admin-only debug endpoint. Resets inventoryDeducted=false for the given
+ * order IDs (or all pending orders if no IDs given) so they get re-processed
+ * by autoDeductUndedcutedOrders on the next poll or page load.
+ * Body: { orderIds?: string[] }
+ */
+router.post("/reset-deduction-flags", async (req, res) => {
+  try {
+    const conn = await getSubHubDbConnection("orders");
+    const { orderIds } = req.body as { orderIds?: string[] };
+
+    let filter: any;
+    if (Array.isArray(orderIds) && orderIds.length > 0) {
+      const oids = orderIds.map((id) => {
+        try { return new mongoose.Types.ObjectId(id); } catch { return null; }
+      }).filter(Boolean);
+      filter = { _id: { $in: oids } };
+    } else {
+      // Reset all active orders that aren't cancelled
+      filter = { status: { $nin: ["cancelled"] }, inventoryDeducted: true };
+    }
+
+    const result = await conn.db.collection("orders").updateMany(
+      filter,
+      { $set: { inventoryDeducted: false } }
+    );
+    logger.info({ modifiedCount: result.modifiedCount, filter }, "reset-deduction-flags: flags reset");
+    res.json({ message: `Reset inventoryDeducted flag on ${result.modifiedCount} order(s). They will be re-deducted on next poll.`, modifiedCount: result.modifiedCount });
+  } catch (err: any) {
+    logger.error({ err }, "reset-deduction-flags: failed");
+    res.status(500).json({ error: "InternalError", message: err.message });
+  }
+});
 
 export default router;
