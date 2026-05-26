@@ -3096,14 +3096,7 @@ function ComboModal({ isOpen, onClose, combo, subHubId, onSaved, nextOrder = 1, 
                           />
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
-                          <span className="text-[10px] text-gray-500 whitespace-nowrap">Qty:</span>
-                          <Input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => setIncludes(includes.map((x, idx) => idx === i ? { ...x, quantity: Math.max(1, Number(e.target.value) || 1) } : x))}
-                            className="h-7 w-14 text-xs border-[#C5D5F5] bg-white text-center"
-                          />
+                          <span className="text-[10px] text-gray-500 whitespace-nowrap">Qty: 1</span>
                         </div>
                         <button type="button" onClick={() => setIncludes(includes.filter((_, idx) => idx !== i))} className="text-blue-200 hover:text-red-500 flex-shrink-0 transition-colors"><X className="w-3.5 h-3.5" /></button>
                       </div>
@@ -3115,11 +3108,6 @@ function ComboModal({ isOpen, onClose, combo, subHubId, onSaved, nextOrder = 1, 
                           </span>
                           {unitOrig > 0 && unitOrig !== unitDisc && (
                             <span className="text-[10px] text-gray-400 line-through">₹{unitOrig.toLocaleString("en-IN")}</span>
-                          )}
-                          {qty > 1 && (
-                            <span className="text-[10px] text-[#1A56DB] font-semibold">
-                              × {qty} = ₹{(unitDisc * qty).toLocaleString("en-IN")}
-                            </span>
                           )}
                         </div>
                       )}
