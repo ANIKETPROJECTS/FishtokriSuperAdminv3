@@ -294,6 +294,25 @@ router.post("/categories", async (req, res) => {
   }
 });
 
+router.put("/categories/reorder", async (req, res) => {
+  try {
+    const ctx = await getSubHubDb(req.params.id, res, req as ScopedRequest);
+    if (!ctx) return;
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) { res.status(400).json({ error: "ValidationError", message: "items array required" }); return; }
+    const ops = items.map(({ id, sortOrder }: { id: string; sortOrder: number }) => {
+      const oid = toId(id);
+      if (!oid) return null;
+      return { updateOne: { filter: { _id: oid }, update: { $set: { sortOrder: Number(sortOrder), updatedAt: new Date() } } } };
+    }).filter(Boolean);
+    if (ops.length > 0) await ctx.conn.db.collection("categories").bulkWrite(ops as any);
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to reorder categories");
+    res.status(500).json({ error: "InternalError", message: "Failed to reorder categories" });
+  }
+});
+
 router.put("/categories/:catId", async (req, res) => {
   try {
     const ctx = await getSubHubDb(req.params.id, res, req as ScopedRequest);
@@ -467,6 +486,25 @@ router.post("/combos", async (req, res) => {
   }
 });
 
+router.put("/combos/reorder", async (req, res) => {
+  try {
+    const ctx = await getSubHubDb(req.params.id, res, req as ScopedRequest);
+    if (!ctx) return;
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) { res.status(400).json({ error: "ValidationError", message: "items array required" }); return; }
+    const ops = items.map(({ id, sortOrder }: { id: string; sortOrder: number }) => {
+      const oid = toId(id);
+      if (!oid) return null;
+      return { updateOne: { filter: { _id: oid }, update: { $set: { sortOrder: Number(sortOrder), updatedAt: new Date() } } } };
+    }).filter(Boolean);
+    if (ops.length > 0) await ctx.conn.db.collection("combos").bulkWrite(ops as any);
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to reorder combos");
+    res.status(500).json({ error: "InternalError", message: "Failed to reorder combos" });
+  }
+});
+
 router.put("/combos/:comboId", async (req, res) => {
   try {
     const ctx = await getSubHubDb(req.params.id, res, req as ScopedRequest);
@@ -545,6 +583,25 @@ router.post("/carousels", async (req, res) => {
   }
 });
 
+router.put("/carousels/reorder", async (req, res) => {
+  try {
+    const ctx = await getSubHubDb(req.params.id, res, req as ScopedRequest);
+    if (!ctx) return;
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) { res.status(400).json({ error: "ValidationError", message: "items array required" }); return; }
+    const ops = items.map(({ id, order }: { id: string; order: number }) => {
+      const oid = toId(id);
+      if (!oid) return null;
+      return { updateOne: { filter: { _id: oid }, update: { $set: { order: Number(order) } } } };
+    }).filter(Boolean);
+    if (ops.length > 0) await ctx.conn.db.collection("carousels").bulkWrite(ops as any);
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to reorder carousels");
+    res.status(500).json({ error: "InternalError", message: "Failed to reorder carousels" });
+  }
+});
+
 router.put("/carousels/:carouselId", async (req, res) => {
   try {
     const ctx = await getSubHubDb(req.params.id, res, req as ScopedRequest);
@@ -611,6 +668,25 @@ router.post("/sections", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to create section");
     res.status(500).json({ error: "InternalError", message: "Failed to create section" });
+  }
+});
+
+router.put("/sections/reorder", async (req, res) => {
+  try {
+    const ctx = await getSubHubDb(req.params.id, res, req as ScopedRequest);
+    if (!ctx) return;
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) { res.status(400).json({ error: "ValidationError", message: "items array required" }); return; }
+    const ops = items.map(({ id, sortOrder }: { id: string; sortOrder: number }) => {
+      const oid = toId(id);
+      if (!oid) return null;
+      return { updateOne: { filter: { _id: oid }, update: { $set: { sortOrder: Number(sortOrder) } } } };
+    }).filter(Boolean);
+    if (ops.length > 0) await ctx.conn.db.collection("sections").bulkWrite(ops as any);
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to reorder sections");
+    res.status(500).json({ error: "InternalError", message: "Failed to reorder sections" });
   }
 });
 
@@ -757,6 +833,25 @@ router.post("/timeslots", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to create timeslot");
     res.status(500).json({ error: "InternalError", message: "Failed to create timeslot" });
+  }
+});
+
+router.put("/timeslots/reorder", async (req, res) => {
+  try {
+    const ctx = await getSubHubDb(req.params.id, res, req as ScopedRequest);
+    if (!ctx) return;
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) { res.status(400).json({ error: "ValidationError", message: "items array required" }); return; }
+    const ops = items.map(({ id, sortOrder }: { id: string; sortOrder: number }) => {
+      const oid = toId(id);
+      if (!oid) return null;
+      return { updateOne: { filter: { _id: oid }, update: { $set: { sortOrder: Number(sortOrder), updatedAt: new Date() } } } };
+    }).filter(Boolean);
+    if (ops.length > 0) await ctx.conn.db.collection("timeslots").bulkWrite(ops as any);
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to reorder timeslots");
+    res.status(500).json({ error: "InternalError", message: "Failed to reorder timeslots" });
   }
 });
 

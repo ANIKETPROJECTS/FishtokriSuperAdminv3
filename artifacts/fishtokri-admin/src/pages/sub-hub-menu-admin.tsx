@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "wouter";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import type { DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   ArrowLeft, Plus, Edit2, Trash2, Search, X, Package, Tag, Ticket,
   Database, AlertCircle, CheckCircle, XCircle, Image,
@@ -43,6 +47,21 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
   DropdownMenuLabel, DropdownMenuTrigger, DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
+
+function SortableItem({ id, children }: { id: string; children: (handle: React.ReactNode, isDragging: boolean) => React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 20 : undefined };
+  const handle = (
+    <span {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing touch-none select-none" title="Drag to reorder">
+      <GripVertical className="w-4 h-4 text-gray-400 hover:text-gray-600 transition-colors" />
+    </span>
+  );
+  return (
+    <div ref={setNodeRef} style={style} className={isDragging ? "opacity-50 shadow-lg rounded-xl" : ""}>
+      {children(handle, isDragging)}
+    </div>
+  );
+}
 
 function getToken() {
   return localStorage.getItem("fishtokri_token") ?? "";
@@ -1185,6 +1204,23 @@ function CategoriesTab({ subHubId, onRefreshStats, onSetExcel }: { subHubId: str
   }, [categories, search, filters, sortValue]);
 
   const pagedCategories = usePaginated(processed, 20, `${search}|${JSON.stringify(filters)}|${sortValue}`);
+  const isDragMode = sortValue === "sort_asc";
+  const nextOrder = categories.length > 0 ? Math.max(...categories.map(c => c.sortOrder ?? 0)) + 1 : 1;
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const sorted = [...categories].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const oldIdx = sorted.findIndex(c => String(c._id) === String(active.id));
+    const newIdx = sorted.findIndex(c => String(c._id) === String(over.id));
+    if (oldIdx === -1 || newIdx === -1) return;
+    const reordered = arrayMove(sorted, oldIdx, newIdx).map((c, i) => ({ ...c, sortOrder: i + 1 }));
+    setCategories(reordered);
+    try {
+      await apiFetch(`/api/sub-hubs/${subHubId}/menu/categories/reorder`, { method: "PUT", body: JSON.stringify({ items: reordered.map(c => ({ id: String(c._id), sortOrder: c.sortOrder })) }) });
+    } catch (err: any) { toast({ title: "Reorder failed", description: err.message, variant: "destructive" }); load(); }
+  };
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -1219,9 +1255,59 @@ function CategoriesTab({ subHubId, onRefreshStats, onSetExcel }: { subHubId: str
         hideLayoutToggle
       />
 
+      {isDragMode && !loading && categories.length > 0 && (
+        <div className="flex items-center gap-1.5 px-1 py-1 text-xs text-indigo-500 bg-indigo-50 rounded-lg">
+          <GripVertical className="w-3 h-3" /><span>Drag categories to reorder — numbers update automatically</span>
+        </div>
+      )}
       {loading ? <div className="space-y-2">{[1,2,3,4].map((i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>
-      : processed.length === 0 ? <EmptyState icon={Tag} message="No categories found" />
-      : (
+      : categories.length === 0 ? <EmptyState icon={Tag} message="No categories found" />
+      : isDragMode ? (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={[...categories].sort((a,b)=>(a.sortOrder??0)-(b.sortOrder??0)).map(c => String(c._id))} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2">
+              {[...categories].sort((a,b)=>(a.sortOrder??0)-(b.sortOrder??0)).map((c) => {
+                const expanded = expandedId === String(c._id);
+                return (
+                  <SortableItem key={String(c._id)} id={String(c._id)}>
+                    {(handle) => (
+                      <div className="border border-gray-100 rounded-xl overflow-hidden">
+                        <div className="flex items-center gap-3 px-4 py-3 bg-white hover:bg-gray-50/50 transition-colors">
+                          <div className="flex-shrink-0">{handle}</div>
+                          {c.imageUrl ? <img src={c.imageUrl} alt={c.name} className="w-10 h-10 rounded-lg object-cover border border-gray-100 flex-shrink-0" /> : <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-50 to-indigo-100 flex items-center justify-center flex-shrink-0"><Tag className="w-4 h-4 text-purple-300" /></div>}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-[#162B4D] text-sm">{c.name}</p>
+                              <StatusBadge active={c.isActive !== false} />
+                            </div>
+                            {Array.isArray(c.subCategories) && c.subCategories.length > 0 && <p className="text-xs text-gray-400 mt-0.5">{c.subCategories.length} sub-categories</p>}
+                          </div>
+                          <span className="text-xs text-gray-400 flex-shrink-0">#{c.sortOrder ?? 0}</span>
+                          <div className="flex items-center gap-1">
+                            {Array.isArray(c.subCategories) && c.subCategories.length > 0 && (
+                              <button onClick={() => setExpandedId(expanded ? null : String(c._id))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-200 text-gray-400 hover:bg-gray-50 transition-colors">
+                                {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                              </button>
+                            )}
+                            <ActionButtons onEdit={() => { setEditing(c); setModalOpen(true); }} onDelete={() => setDeleteId(String(c._id))} />
+                          </div>
+                        </div>
+                        {expanded && Array.isArray(c.subCategories) && c.subCategories.length > 0 && (
+                          <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-3">
+                            <div className="flex flex-wrap gap-1.5">
+                              {c.subCategories.map((s: any) => <span key={s.name} className="text-xs bg-white border border-gray-200 text-gray-600 px-2 py-1 rounded-full">{s.name}</span>)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </SortableItem>
+                );
+              })}
+            </div>
+          </SortableContext>
+        </DndContext>
+      ) : (
         <div className="space-y-2">
           {pagedCategories.pageItems.map((c) => {
             const expanded = expandedId === String(c._id);
@@ -1267,7 +1353,7 @@ function CategoriesTab({ subHubId, onRefreshStats, onSetExcel }: { subHubId: str
         label="categories"
       />
 
-      <CategoryModal isOpen={modalOpen} onClose={() => setModalOpen(false)} category={editing} subHubId={subHubId} onSaved={() => { load(); onRefreshStats(); }} />
+      <CategoryModal isOpen={modalOpen} onClose={() => setModalOpen(false)} category={editing} subHubId={subHubId} onSaved={() => { load(); onRefreshStats(); }} nextOrder={nextOrder} allItems={categories} />
       <DeleteDialog open={!!deleteId} onCancel={() => setDeleteId(null)} onConfirm={handleDelete} title="Delete Category" description="This will permanently remove the category." />
     </div>
   );
@@ -1396,6 +1482,23 @@ function CombosTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (cf
   }, [combos, search, filters, sortValue]);
 
   const pagedCombos = usePaginated(processed, 20, `${search}|${JSON.stringify(filters)}|${sortValue}`);
+  const isDragMode = sortValue === "sort_asc";
+  const nextOrder = combos.length > 0 ? Math.max(...combos.map(c => c.sortOrder ?? 0)) + 1 : 1;
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const sorted = [...combos].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const oldIdx = sorted.findIndex(c => String(c._id) === String(active.id));
+    const newIdx = sorted.findIndex(c => String(c._id) === String(over.id));
+    if (oldIdx === -1 || newIdx === -1) return;
+    const reordered = arrayMove(sorted, oldIdx, newIdx).map((c, i) => ({ ...c, sortOrder: i + 1 }));
+    setCombos(reordered);
+    try {
+      await apiFetch(`/api/sub-hubs/${subHubId}/menu/combos/reorder`, { method: "PUT", body: JSON.stringify({ items: reordered.map(c => ({ id: String(c._id), sortOrder: c.sortOrder })) }) });
+    } catch (err: any) { toast({ title: "Reorder failed", description: err.message, variant: "destructive" }); load(); }
+  };
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -1430,9 +1533,56 @@ function CombosTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (cf
         hideLayoutToggle
       />
 
+      {isDragMode && !loading && combos.length > 0 && (
+        <div className="flex items-center gap-1.5 px-1 py-1 text-xs text-indigo-500 bg-indigo-50 rounded-lg">
+          <GripVertical className="w-3 h-3" /><span>Drag combos to reorder — numbers update automatically</span>
+        </div>
+      )}
       {loading ? <div className="space-y-2">{[1,2].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>
-      : processed.length === 0 ? <EmptyState icon={ShoppingBag} message="No combos found" />
-      : (
+      : combos.length === 0 ? <EmptyState icon={ShoppingBag} message="No combos found" />
+      : isDragMode ? (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={[...combos].sort((a,b)=>(a.sortOrder??0)-(b.sortOrder??0)).map(c => String(c._id))} strategy={verticalListSortingStrategy}>
+            <div className="overflow-x-auto rounded-lg border border-gray-100">
+              <table className="w-full text-sm">
+                <thead><tr className="bg-gray-50 text-left">
+                  <th className="px-3 py-2.5 w-8"></th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">#</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Combo</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Price</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Discount</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Items</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Actions</th>
+                </tr></thead>
+                <tbody className="divide-y divide-gray-50">
+                  {[...combos].sort((a,b)=>(a.sortOrder??0)-(b.sortOrder??0)).map((c) => (
+                    <SortableItem key={String(c._id)} id={String(c._id)}>
+                      {(handle) => (
+                        <tr className="hover:bg-gray-50/50 transition-colors">
+                          <td className="px-3 py-3">{handle}</td>
+                          <td className="px-4 py-3 text-xs font-bold text-gray-400">#{c.sortOrder ?? 0}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2.5">
+                              {c.imageUrl ? <img src={c.imageUrl} alt={c.name} className="w-9 h-9 rounded-lg object-cover border border-gray-100 flex-shrink-0" /> : <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0"><ShoppingBag className="w-4 h-4 text-indigo-200" /></div>}
+                              <div><p className="font-semibold text-[#162B4D] text-sm">{c.name}</p>{c.description && <p className="text-xs text-gray-400 truncate max-w-[180px]">{c.description}</p>}</div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3"><span className="font-bold text-[#162B4D]">₹{c.discountedPrice ?? c.price}</span>{c.originalPrice > (c.discountedPrice ?? c.price) && <span className="text-xs text-gray-400 line-through ml-1">₹{c.originalPrice}</span>}</td>
+                          <td className="px-4 py-3">{c.discount > 0 ? <span className="text-xs bg-green-50 text-green-600 font-semibold px-1.5 py-0.5 rounded-full">{c.discount}% off</span> : "—"}</td>
+                          <td className="px-4 py-3 text-gray-500 text-xs">{Array.isArray(c.includes) ? c.includes.length : 0}</td>
+                          <td className="px-4 py-3"><StatusBadge active={c.isActive !== false} /></td>
+                          <td className="px-4 py-3"><ActionButtons onEdit={() => { setEditing(c); setModalOpen(true); }} onDelete={() => setDeleteId(String(c._id))} /></td>
+                        </tr>
+                      )}
+                    </SortableItem>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SortableContext>
+        </DndContext>
+      ) : (
         <div className="overflow-x-auto rounded-lg border border-gray-100">
           <table className="w-full text-sm">
             <thead><tr className="bg-gray-50 text-left">
@@ -1445,7 +1595,6 @@ function CombosTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (cf
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {pagedCombos.pageItems.map((c) => {
-                const img = Array.isArray(c.images) && c.images.length > 0 ? c.images[0] : null;
                 return (
                   <tr key={String(c._id)} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-4 py-3">
@@ -1478,7 +1627,7 @@ function CombosTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (cf
         label="combos"
       />
 
-      <ComboModal isOpen={modalOpen} onClose={() => setModalOpen(false)} combo={editing} subHubId={subHubId} onSaved={load} />
+      <ComboModal isOpen={modalOpen} onClose={() => setModalOpen(false)} combo={editing} subHubId={subHubId} onSaved={load} nextOrder={nextOrder} allItems={combos} />
       <DeleteDialog open={!!deleteId} onCancel={() => setDeleteId(null)} onConfirm={handleDelete} title="Delete Combo" description="This will permanently remove the combo." />
     </div>
   );
@@ -1738,6 +1887,23 @@ function CarouselsTab({ subHubId }: { subHubId: string }) {
   }, [carousels, search, filters, sortValue]);
 
   const pagedCarousels = usePaginated(processed, 20, `${search}|${JSON.stringify(filters)}|${sortValue}`);
+  const isDragMode = sortValue === "order_asc";
+  const nextOrder = carousels.length > 0 ? Math.max(...carousels.map(c => c.order ?? 0)) + 1 : 1;
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const sorted = [...carousels].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const oldIdx = sorted.findIndex(c => String(c._id) === String(active.id));
+    const newIdx = sorted.findIndex(c => String(c._id) === String(over.id));
+    if (oldIdx === -1 || newIdx === -1) return;
+    const reordered = arrayMove(sorted, oldIdx, newIdx).map((c, i) => ({ ...c, order: i + 1 }));
+    setCarousels(reordered);
+    try {
+      await apiFetch(`/api/sub-hubs/${subHubId}/menu/carousels/reorder`, { method: "PUT", body: JSON.stringify({ items: reordered.map(c => ({ id: String(c._id), order: c.order })) }) });
+    } catch (err: any) { toast({ title: "Reorder failed", description: err.message, variant: "destructive" }); load(); }
+  };
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -1771,9 +1937,39 @@ function CarouselsTab({ subHubId }: { subHubId: string }) {
         hideLayoutToggle
       />
 
+      {isDragMode && !loading && carousels.length > 0 && (
+        <div className="flex items-center gap-1.5 px-1 py-1 text-xs text-indigo-500 bg-indigo-50 rounded-lg">
+          <GripVertical className="w-3 h-3" /><span>Drag banners to reorder — numbers update automatically</span>
+        </div>
+      )}
       {loading ? <div className="space-y-2">{[1,2].map((i) => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>
-      : processed.length === 0 ? <EmptyState icon={Image} message="No banners found" />
-      : (
+      : carousels.length === 0 ? <EmptyState icon={Image} message="No banners found" />
+      : isDragMode ? (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={[...carousels].sort((a,b)=>(a.order??0)-(b.order??0)).map(c => String(c._id))} strategy={verticalListSortingStrategy}>
+            <div className="space-y-3">
+              {[...carousels].sort((a,b)=>(a.order??0)-(b.order??0)).map((c) => (
+                <SortableItem key={String(c._id)} id={String(c._id)}>
+                  {(handle) => (
+                    <div className="border border-gray-100 rounded-xl overflow-hidden flex gap-3 bg-white p-3 hover:shadow-sm transition-shadow items-center">
+                      <div className="flex items-center gap-2 flex-shrink-0">{handle}<span className="text-xs font-bold text-gray-400">#{c.order}</span></div>
+                      <div className="w-28 h-14 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 border border-gray-100">
+                        {c.imageUrl ? <img src={c.imageUrl} alt={c.title ?? "Banner"} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Image className="w-4 h-4 text-gray-300" /></div>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-[#162B4D] text-sm">{c.title || <span className="text-gray-400 font-normal italic">No title</span>}</p>
+                        {c.linkUrl && <p className="text-xs text-gray-400 truncate">{c.linkUrl}</p>}
+                      </div>
+                      <Switch checked={c.isActive !== false} onCheckedChange={() => toggleStatus(c)} className="data-[state=checked]:bg-[#1A56DB] data-[state=unchecked]:bg-gray-400 flex-shrink-0" />
+                      <ActionButtons onEdit={() => { setEditing(c); setModalOpen(true); }} onDelete={() => setDeleteId(String(c._id))} />
+                    </div>
+                  )}
+                </SortableItem>
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      ) : (
         <div className="space-y-3">
           {pagedCarousels.pageItems.map((c) => (
             <div key={String(c._id)} className="border border-gray-100 rounded-xl overflow-hidden flex gap-3 bg-white p-3 hover:shadow-sm transition-shadow items-center">
@@ -1803,7 +1999,7 @@ function CarouselsTab({ subHubId }: { subHubId: string }) {
         label="banners"
       />
 
-      <CarouselModal isOpen={modalOpen} onClose={() => setModalOpen(false)} carousel={editing} subHubId={subHubId} onSaved={load} />
+      <CarouselModal isOpen={modalOpen} onClose={() => setModalOpen(false)} carousel={editing} subHubId={subHubId} onSaved={load} nextOrder={nextOrder} allItems={carousels} />
       <DeleteDialog open={!!deleteId} onCancel={() => setDeleteId(null)} onConfirm={handleDelete} title="Delete Banner" description="This will permanently remove the banner from the carousel." />
     </div>
   );
@@ -1916,6 +2112,23 @@ function SectionsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (
   }, [sections, search, filters, sortValue]);
 
   const pagedSections = usePaginated(processed, 20, `${search}|${JSON.stringify(filters)}|${sortValue}`);
+  const isDragMode = sortValue === "sort_asc";
+  const nextOrder = sections.length > 0 ? Math.max(...sections.map(s => s.sortOrder ?? 0)) + 1 : 1;
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const sorted = [...sections].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const oldIdx = sorted.findIndex(s => String(s._id) === String(active.id));
+    const newIdx = sorted.findIndex(s => String(s._id) === String(over.id));
+    if (oldIdx === -1 || newIdx === -1) return;
+    const reordered = arrayMove(sorted, oldIdx, newIdx).map((s, i) => ({ ...s, sortOrder: i + 1 }));
+    setSections(reordered);
+    try {
+      await apiFetch(`/api/sub-hubs/${subHubId}/menu/sections/reorder`, { method: "PUT", body: JSON.stringify({ items: reordered.map(s => ({ id: String(s._id), sortOrder: s.sortOrder })) }) });
+    } catch (err: any) { toast({ title: "Reorder failed", description: err.message, variant: "destructive" }); load(); }
+  };
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -1950,9 +2163,34 @@ function SectionsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (
         hideLayoutToggle
       />
 
+      {isDragMode && !loading && sections.length > 0 && (
+        <div className="flex items-center gap-1.5 px-1 py-1 text-xs text-indigo-500 bg-indigo-50 rounded-lg">
+          <GripVertical className="w-3 h-3" /><span>Drag sections to reorder — numbers update automatically</span>
+        </div>
+      )}
       {loading ? <div className="space-y-2">{[1,2,3].map((i) => <Skeleton key={i} className="h-12 rounded-lg" />)}</div>
-      : processed.length === 0 ? <EmptyState icon={LayoutList} message="No sections found" />
-      : (
+      : sections.length === 0 ? <EmptyState icon={LayoutList} message="No sections found" />
+      : isDragMode ? (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={[...sections].sort((a,b)=>(a.sortOrder??0)-(b.sortOrder??0)).map(s => String(s._id))} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2">
+              {[...sections].sort((a,b)=>(a.sortOrder??0)-(b.sortOrder??0)).map((s) => (
+                <SortableItem key={String(s._id)} id={String(s._id)}>
+                  {(handle) => (
+                    <div className="flex items-center gap-3 border border-gray-100 rounded-xl px-4 py-3 bg-white hover:bg-gray-50/50 transition-colors">
+                      <div className="flex items-center gap-2 flex-shrink-0">{handle}<span className="text-xs font-bold text-gray-400">#{s.sortOrder}</span></div>
+                      <p className="font-semibold text-[#162B4D] text-sm flex-1 min-w-0 truncate">{s.title}</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold capitalize border flex-shrink-0 ${TYPE_COLORS[s.type] ?? "bg-gray-100 text-gray-500 border-gray-200"}`}>{s.type}</span>
+                      <StatusBadge active={s.isActive !== false} />
+                      <ActionButtons onEdit={() => { setEditing(s); setModalOpen(true); }} onDelete={() => setDeleteId(String(s._id))} />
+                    </div>
+                  )}
+                </SortableItem>
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      ) : (
         <div className="space-y-2">
           {pagedSections.pageItems.map((s) => (
             <div key={String(s._id)} className="flex items-center gap-3 border border-gray-100 rounded-xl px-4 py-3 bg-white hover:bg-gray-50/50 transition-colors">
@@ -1977,7 +2215,7 @@ function SectionsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (
         label="sections"
       />
 
-      <SectionModal isOpen={modalOpen} onClose={() => setModalOpen(false)} section={editing} subHubId={subHubId} onSaved={load} />
+      <SectionModal isOpen={modalOpen} onClose={() => setModalOpen(false)} section={editing} subHubId={subHubId} onSaved={load} nextOrder={nextOrder} allItems={sections} />
       <DeleteDialog open={!!deleteId} onCancel={() => setDeleteId(null)} onConfirm={handleDelete} title="Delete Section" description="This will permanently remove this homepage section." />
     </div>
   );
@@ -2579,11 +2817,11 @@ function ProductModal({ isOpen, onClose, product, subHubId, categories, onSaved 
   );
 }
 
-function CategoryModal({ isOpen, onClose, category, subHubId, onSaved }: any) {
+function CategoryModal({ isOpen, onClose, category, subHubId, onSaved, nextOrder = 1, allItems = [] }: any) {
   const { toast } = useToast();
   const isEditing = !!category;
   const [name, setName] = useState(""); const [imageUrl, setImageUrl] = useState("");
-  const [isActive, setIsActive] = useState(true); const [sortOrder, setSortOrder] = useState("0");
+  const [isActive, setIsActive] = useState(true); const [sortOrder, setSortOrder] = useState("1");
   const [catImageMode, setCatImageMode] = useState<"url" | "upload">("url");
   const [catImageUploading, setCatImageUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -2591,10 +2829,10 @@ function CategoryModal({ isOpen, onClose, category, subHubId, onSaved }: any) {
   useEffect(() => {
     if (isOpen) {
       if (category) { setName(category.name ?? ""); setImageUrl(category.imageUrl ?? ""); setIsActive(category.isActive !== false); setSortOrder(String(category.sortOrder ?? 0)); }
-      else { setName(""); setImageUrl(""); setIsActive(true); setSortOrder("0"); }
+      else { setName(""); setImageUrl(""); setIsActive(true); setSortOrder(String(nextOrder)); }
       setCatImageMode("url");
     }
-  }, [isOpen, category]);
+  }, [isOpen, category, nextOrder]);
 
   const handleCatImageFile = async (file: File) => {
     setCatImageUploading(true);
@@ -2618,7 +2856,10 @@ function CategoryModal({ isOpen, onClose, category, subHubId, onSaved }: any) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
-    const payload = { name, imageUrl, isActive, sortOrder: Number(sortOrder) || 0 };
+    const soNum = Number(sortOrder) || 0;
+    const dup = allItems.some((x: any) => (x.sortOrder ?? 0) === soNum && String(x._id) !== String(category?._id));
+    if (dup) { toast({ title: "Duplicate order number", description: `Sort order ${soNum} is already used by another category.`, variant: "destructive" }); setSaving(false); return; }
+    const payload = { name, imageUrl, isActive, sortOrder: soNum };
     try {
       if (isEditing) { await apiFetch(`/api/sub-hubs/${subHubId}/menu/categories/${category._id}`, { method: "PUT", body: JSON.stringify(payload) }); toast({ title: "Category updated" }); }
       else { await apiFetch(`/api/sub-hubs/${subHubId}/menu/categories`, { method: "POST", body: JSON.stringify(payload) }); toast({ title: "Category added" }); }
@@ -2668,7 +2909,7 @@ function CategoryModal({ isOpen, onClose, category, subHubId, onSaved }: any) {
 type ComboNutrition = { icon: string; label: string; value: string; unit: string };
 type ComboInclude = { productId: string; label: string };
 
-function ComboModal({ isOpen, onClose, combo, subHubId, onSaved }: any) {
+function ComboModal({ isOpen, onClose, combo, subHubId, onSaved, nextOrder = 1, allItems = [] }: any) {
   const { toast } = useToast();
   const isEditing = !!combo;
 
@@ -2681,7 +2922,7 @@ function ComboModal({ isOpen, onClose, combo, subHubId, onSaved }: any) {
   const [weight, setWeight] = useState("");
   const [tagsStr, setTagsStr] = useState("");
   const [isActive, setIsActive] = useState(true);
-  const [sortOrder, setSortOrder] = useState("0");
+  const [sortOrder, setSortOrder] = useState("1");
   const [includes, setIncludes] = useState<ComboInclude[]>([]);
   const [nutrition, setNutrition] = useState<ComboNutrition[]>([]);
   const [availableProducts, setAvailableProducts] = useState<any[]>([]);
@@ -2712,10 +2953,10 @@ function ComboModal({ isOpen, onClose, combo, subHubId, onSaved }: any) {
       setIsActive(combo.isActive !== false); setSortOrder(String(combo.sortOrder ?? 0));
     } else {
       setName(""); setDescription(""); setFullDescription(""); setDiscountedPrice(""); setOriginalPrice("");
-      setServes(""); setWeight(""); setTagsStr(""); setIncludes([]); setNutrition([]); setIsActive(true); setSortOrder("0");
+      setServes(""); setWeight(""); setTagsStr(""); setIncludes([]); setNutrition([]); setIsActive(true); setSortOrder(String(nextOrder));
     }
     setProductSearch(""); setSelectedCategory("all");
-  }, [isOpen, combo]);
+  }, [isOpen, combo, nextOrder]);
 
   const toggleProduct = (product: any) => {
     const id = String(product._id);
@@ -2739,6 +2980,9 @@ function ComboModal({ isOpen, onClose, combo, subHubId, onSaved }: any) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
+    const soNum = Number(sortOrder) || 0;
+    const dup = allItems.some((x: any) => (x.sortOrder ?? 0) === soNum && String(x._id) !== String(combo?._id));
+    if (dup) { toast({ title: "Duplicate order number", description: `Sort order ${soNum} is already used by another combo.`, variant: "destructive" }); setSaving(false); return; }
     const dp = Number(discountedPrice) || 0; const op = Number(originalPrice) || 0;
     const payload = {
       name, description, fullDescription, serves, weight,
@@ -2747,7 +2991,7 @@ function ComboModal({ isOpen, onClose, combo, subHubId, onSaved }: any) {
       includes,
       nutrition: nutrition.map((n) => ({ icon: n.icon, label: n.label, value: n.value, unit: n.unit })),
       tags: tagsStr.split(",").map((t) => t.trim()).filter(Boolean),
-      isActive, sortOrder: Number(sortOrder) || 0,
+      isActive, sortOrder: soNum,
     };
     try {
       if (isEditing) { await apiFetch(`/api/sub-hubs/${subHubId}/menu/combos/${combo._id}`, { method: "PUT", body: JSON.stringify(payload) }); toast({ title: "Combo updated" }); }
@@ -3159,14 +3403,14 @@ function CouponModal({ isOpen, onClose, coupon, subHubId, onSaved }: any) {
   );
 }
 
-function CarouselModal({ isOpen, onClose, carousel, subHubId, onSaved }: any) {
+function CarouselModal({ isOpen, onClose, carousel, subHubId, onSaved, nextOrder = 1, allItems = [] }: any) {
   const { toast } = useToast();
   const isEditing = !!carousel;
   const [imageUrl, setImageUrl] = useState("");
   const [imageMode, setImageMode] = useState<"url" | "upload">("url");
   const [imageUploading, setImageUploading] = useState(false);
   const [title, setTitle] = useState("");
-  const [order, setOrder] = useState("0");
+  const [order, setOrder] = useState("1");
   const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -3176,11 +3420,11 @@ function CarouselModal({ isOpen, onClose, carousel, subHubId, onSaved }: any) {
         setImageUrl(carousel.imageUrl ?? ""); setTitle(carousel.title ?? "");
         setOrder(String(carousel.order ?? 0)); setIsActive(carousel.isActive !== false);
       } else {
-        setImageUrl(""); setTitle(""); setOrder("0"); setIsActive(true);
+        setImageUrl(""); setTitle(""); setOrder(String(nextOrder)); setIsActive(true);
       }
       setImageMode("url"); setImageUploading(false);
     }
-  }, [isOpen, carousel]);
+  }, [isOpen, carousel, nextOrder]);
 
   const handleImageFile = async (file: File) => {
     setImageUploading(true);
@@ -3205,8 +3449,11 @@ function CarouselModal({ isOpen, onClose, carousel, subHubId, onSaved }: any) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!imageUrl) { toast({ title: "Image required", description: "Please provide or upload a banner image.", variant: "destructive" }); return; }
+    const orderNum = Number(order) || 0;
+    const dup = allItems.some((x: any) => (x.order ?? 0) === orderNum && String(x._id) !== String(carousel?._id));
+    if (dup) { toast({ title: "Duplicate order number", description: `Order ${orderNum} is already used by another banner. Please choose a unique number.`, variant: "destructive" }); return; }
     setSaving(true);
-    const payload = { imageUrl, title: title || null, order: Number(order) || 0, isActive };
+    const payload = { imageUrl, title: title || null, order: orderNum, isActive };
     try {
       if (isEditing) { await apiFetch(`/api/sub-hubs/${subHubId}/menu/carousels/${carousel._id}`, { method: "PUT", body: JSON.stringify(payload) }); toast({ title: "Banner updated" }); }
       else { await apiFetch(`/api/sub-hubs/${subHubId}/menu/carousels`, { method: "POST", body: JSON.stringify(payload) }); toast({ title: "Banner added" }); }
@@ -3264,23 +3511,26 @@ function CarouselModal({ isOpen, onClose, carousel, subHubId, onSaved }: any) {
   );
 }
 
-function SectionModal({ isOpen, onClose, section, subHubId, onSaved }: any) {
+function SectionModal({ isOpen, onClose, section, subHubId, onSaved, nextOrder = 1, allItems = [] }: any) {
   const { toast } = useToast();
   const isEditing = !!section;
   const [title, setTitle] = useState(""); const [type, setType] = useState("products");
-  const [sortOrder, setSortOrder] = useState("0"); const [isActive, setIsActive] = useState(true);
+  const [sortOrder, setSortOrder] = useState("1"); const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       if (section) { setTitle(section.title ?? ""); setType(section.type ?? "products"); setSortOrder(String(section.sortOrder ?? 0)); setIsActive(section.isActive !== false); }
-      else { setTitle(""); setType("products"); setSortOrder("0"); setIsActive(true); }
+      else { setTitle(""); setType("products"); setSortOrder(String(nextOrder)); setIsActive(true); }
     }
-  }, [isOpen, section]);
+  }, [isOpen, section, nextOrder]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
-    const payload = { title, type, sortOrder: Number(sortOrder) || 0, isActive };
+    const soNum = Number(sortOrder) || 0;
+    const dup = allItems.some((x: any) => (x.sortOrder ?? 0) === soNum && String(x._id) !== String(section?._id));
+    if (dup) { toast({ title: "Duplicate order number", description: `Sort order ${soNum} is already used by another section.`, variant: "destructive" }); setSaving(false); return; }
+    const payload = { title, type, sortOrder: soNum, isActive };
     try {
       if (isEditing) { await apiFetch(`/api/sub-hubs/${subHubId}/menu/sections/${section._id}`, { method: "PUT", body: JSON.stringify(payload) }); toast({ title: "Section updated" }); }
       else { await apiFetch(`/api/sub-hubs/${subHubId}/menu/sections`, { method: "POST", body: JSON.stringify(payload) }); toast({ title: "Section added" }); }
@@ -3411,6 +3661,23 @@ function TimeSlotsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: 
   }, [timeslots, search, filters, sortValue]);
 
   const pagedTimeslots = usePaginated(processed, 20, `${search}|${JSON.stringify(filters)}|${sortValue}`);
+  const isDragMode = sortValue === "sort_asc";
+  const nextOrder = timeslots.length > 0 ? Math.max(...timeslots.map(s => s.sortOrder ?? 0)) + 1 : 1;
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const sorted = [...timeslots].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const oldIdx = sorted.findIndex(s => String(s._id) === String(active.id));
+    const newIdx = sorted.findIndex(s => String(s._id) === String(over.id));
+    if (oldIdx === -1 || newIdx === -1) return;
+    const reordered = arrayMove(sorted, oldIdx, newIdx).map((s, i) => ({ ...s, sortOrder: i + 1 }));
+    setTimeslots(reordered);
+    try {
+      await apiFetch(`/api/sub-hubs/${subHubId}/menu/timeslots/reorder`, { method: "PUT", body: JSON.stringify({ items: reordered.map(s => ({ id: String(s._id), sortOrder: s.sortOrder })) }) });
+    } catch (err: any) { toast({ title: "Reorder failed", description: err.message, variant: "destructive" }); load(); }
+  };
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -3445,10 +3712,44 @@ function TimeSlotsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: 
         hideLayoutToggle
       />
 
+      {isDragMode && !loading && timeslots.length > 0 && (
+        <div className="flex items-center gap-1.5 px-1 py-1 text-xs text-indigo-500 bg-indigo-50 rounded-lg">
+          <GripVertical className="w-3 h-3" /><span>Drag time slots to reorder — numbers update automatically</span>
+        </div>
+      )}
       {loading ? (
         <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
-      ) : processed.length === 0 ? (
+      ) : timeslots.length === 0 ? (
         <EmptyState icon={Clock} message="No time slots found" sub="Try adjusting your search or filters" />
+      ) : isDragMode ? (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={[...timeslots].sort((a,b)=>(a.sortOrder??0)-(b.sortOrder??0)).map(s => String(s._id))} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2">
+              {[...timeslots].sort((a,b)=>(a.sortOrder??0)-(b.sortOrder??0)).map((s) => (
+                <SortableItem key={String(s._id)} id={String(s._id)}>
+                  {(handle) => (
+                    <div className="flex items-center gap-4 p-3.5 bg-white border border-gray-100 rounded-xl hover:shadow-sm transition-shadow">
+                      <div className="flex-shrink-0">{handle}</div>
+                      <div className="w-10 h-10 rounded-lg bg-cyan-50 flex items-center justify-center flex-shrink-0">
+                        <Clock className="w-5 h-5 text-cyan-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-[#162B4D] text-sm">{s.label}</p>
+                          {s.isInstant && <span className="text-[10px] bg-orange-50 text-orange-600 font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">Instant</span>}
+                          <StatusBadge active={s.isActive !== false} />
+                        </div>
+                        <p className="text-xs text-gray-400">{s.startTime} – {s.endTime}{s.extraCharge > 0 ? ` · +₹${s.extraCharge} extra` : ""}</p>
+                      </div>
+                      <span className="text-xs font-bold text-gray-400">#{s.sortOrder ?? 0}</span>
+                      <ActionButtons onEdit={() => { setEditing(s); setModalOpen(true); }} onDelete={() => setDeleteId(String(s._id))} />
+                    </div>
+                  )}
+                </SortableItem>
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       ) : (
         <div className="space-y-2">
           {pagedTimeslots.pageItems.map((s) => (
@@ -3479,13 +3780,13 @@ function TimeSlotsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: 
         label="time slots"
       />
 
-      <TimeslotModal isOpen={modalOpen} onClose={() => setModalOpen(false)} timeslot={editing} subHubId={subHubId} onSaved={load} />
+      <TimeslotModal isOpen={modalOpen} onClose={() => setModalOpen(false)} timeslot={editing} subHubId={subHubId} onSaved={load} nextOrder={nextOrder} allItems={timeslots} />
       <DeleteDialog open={!!deleteId} onCancel={() => setDeleteId(null)} onConfirm={handleDelete} title="Delete Time Slot" description="This action cannot be undone." />
     </div>
   );
 }
 
-function TimeslotModal({ isOpen, onClose, timeslot, subHubId, onSaved }: any) {
+function TimeslotModal({ isOpen, onClose, timeslot, subHubId, onSaved, nextOrder = 1, allItems = [] }: any) {
   const { toast } = useToast();
   const isEditing = !!timeslot;
   const [label, setLabel] = useState("");
@@ -3494,7 +3795,7 @@ function TimeslotModal({ isOpen, onClose, timeslot, subHubId, onSaved }: any) {
   const [isInstant, setIsInstant] = useState(false);
   const [extraCharge, setExtraCharge] = useState("0");
   const [isActive, setIsActive] = useState(true);
-  const [sortOrder, setSortOrder] = useState("0");
+  const [sortOrder, setSortOrder] = useState("1");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -3504,14 +3805,17 @@ function TimeslotModal({ isOpen, onClose, timeslot, subHubId, onSaved }: any) {
         setIsInstant(timeslot.isInstant === true); setExtraCharge(String(timeslot.extraCharge ?? 0));
         setIsActive(timeslot.isActive !== false); setSortOrder(String(timeslot.sortOrder ?? 0));
       } else {
-        setLabel(""); setStartTime(""); setEndTime(""); setIsInstant(false); setExtraCharge("0"); setIsActive(true); setSortOrder("0");
+        setLabel(""); setStartTime(""); setEndTime(""); setIsInstant(false); setExtraCharge("0"); setIsActive(true); setSortOrder(String(nextOrder));
       }
     }
-  }, [isOpen, timeslot]);
+  }, [isOpen, timeslot, nextOrder]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
-    const payload = { label, startTime, endTime, isInstant, extraCharge: Number(extraCharge) || 0, isActive, sortOrder: Number(sortOrder) || 0 };
+    const soNum = Number(sortOrder) || 0;
+    const dup = allItems.some((x: any) => (x.sortOrder ?? 0) === soNum && String(x._id) !== String(timeslot?._id));
+    if (dup) { toast({ title: "Duplicate order number", description: `Sort order ${soNum} is already used by another time slot.`, variant: "destructive" }); setSaving(false); return; }
+    const payload = { label, startTime, endTime, isInstant, extraCharge: Number(extraCharge) || 0, isActive, sortOrder: soNum };
     try {
       if (isEditing) { await apiFetch(`/api/sub-hubs/${subHubId}/menu/timeslots/${timeslot._id}`, { method: "PUT", body: JSON.stringify(payload) }); toast({ title: "Time slot updated" }); }
       else { await apiFetch(`/api/sub-hubs/${subHubId}/menu/timeslots`, { method: "POST", body: JSON.stringify(payload) }); toast({ title: "Time slot added" }); }
