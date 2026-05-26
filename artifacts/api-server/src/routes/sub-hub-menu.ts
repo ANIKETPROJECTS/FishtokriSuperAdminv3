@@ -185,16 +185,17 @@ router.put("/products/:productId", async (req, res) => {
       const newCouponIds: string[] = (Array.isArray(couponIds) ? couponIds : []).map((c: any) => String(c));
       const removedCouponIds = oldCouponIds.filter((id) => !newCouponIds.includes(id)).map((id) => toId(id)).filter(Boolean);
       const addedCouponIds = newCouponIds.filter((id) => !oldCouponIds.includes(id)).map((id) => toId(id)).filter(Boolean);
+      const productIdStr = String(oid);
       if (removedCouponIds.length > 0) {
         await ctx.conn.db.collection("coupons").updateMany(
           { _id: { $in: removedCouponIds } },
-          { $pull: { applicableProducts: oid } }
+          { $pull: { applicableProducts: productIdStr } }
         );
       }
       if (addedCouponIds.length > 0) {
         await ctx.conn.db.collection("coupons").updateMany(
           { _id: { $in: addedCouponIds } },
-          { $addToSet: { applicableProducts: oid } }
+          { $addToSet: { applicableProducts: productIdStr } }
         );
       }
     }
