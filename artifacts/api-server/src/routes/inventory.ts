@@ -664,7 +664,15 @@ function orderShouldDeduct(order: OrderForSync) {
 /** Expand raw order items so that any combo productId is replaced by its constituent products.
  * Quantities are aggregated per product so that two combos sharing a product get combined.
  * Each combo include may carry a `quantity` field specifying how many units of that product
- * are contained in one combo (defaults to 1). The final deduction is orderedQty × includeQty. */
+ * are contained in one combo (defaults to 1). The final deduction is orderedQty × includeQty.
+ *
+ * Lookup strategy per item:
+ *  1. If productId present → look up product by _id. Found? treat as normal product.
+ *  2. If productId present but not a product → look up combo by _id. Found? expand its includes.
+ *  3. If still not resolved (no productId, or ID lookup missed) → look up combo by name (case-insensitive).
+ *  4. If name lookup finds a combo → expand its includes.
+ *  5. If name lookup finds no combo → try to find a product by name and treat as direct product.
+ */
 async function expandOrderItems(
   productsCol: any,
   combosCol: any,
@@ -672,45 +680,89 @@ async function expandOrderItems(
 ): Promise<Array<{ productId: string; name: string; quantity: number; unit: string }>> {
   const aggregated = new Map<string, { productId: string; name: string; quantity: number; unit: string }>();
 
+  /** Helper: expand a resolved combo document into aggregated constituent products */
+  async function expandCombo(combo: any, qty: number) {
+    if (!combo || !Array.isArray(combo.includes) || combo.includes.length === 0) return false;
+    logger.info({ comboId: String(combo._id), comboName: combo.name, includeCount: combo.includes.length }, "expandOrderItems: expanding combo into constituent products");
+    for (const inc of combo.includes) {
+      if (!inc.productId) continue;
+      const incPid = toId(String(inc.productId));
+      if (!incPid) continue;
+      const incProduct = await productsCol.findOne({ _id: incPid }, { projection: { name: 1, unit: 1 } });
+      if (!incProduct) {
+        logger.warn({ comboId: String(combo._id), includeProductId: String(inc.productId) }, "expandOrderItems: included product not found in sub-hub products — skipping");
+        continue;
+      }
+      const key = String(incPid);
+      const entry = aggregated.get(key);
+      const qtyPerCombo = Math.max(1, Number(inc.quantity) || 1);
+      const totalDeduct = qty * qtyPerCombo;
+      if (entry) entry.quantity += totalDeduct;
+      else aggregated.set(key, { productId: key, name: incProduct.name ?? inc.label ?? "", quantity: totalDeduct, unit: incProduct.unit ?? "" });
+    }
+    return true;
+  }
+
   for (const it of rawItems) {
-    if (!it.productId) continue;
-    const pid = toId(String(it.productId));
-    if (!pid) continue;
     const qty = Math.max(0, Number(it.quantity) || 0);
     if (qty <= 0) continue;
 
-    const isRealProduct = await productsCol.findOne({ _id: pid }, { projection: { _id: 1 } });
-    if (isRealProduct) {
-      const key = String(pid);
-      const entry = aggregated.get(key);
-      if (entry) entry.quantity += qty;
-      else aggregated.set(key, { productId: key, name: it.name ?? "", quantity: qty, unit: it.unit ?? "" });
-    } else {
-      // Not found in products — check if it is a combo and expand its constituent products
-      const combo = await combosCol.findOne({ _id: pid });
-      if (combo && Array.isArray(combo.includes) && combo.includes.length > 0) {
-        logger.info({ comboId: String(pid), comboName: combo.name, includeCount: combo.includes.length }, "expandOrderItems: expanding combo into constituent products");
-        for (const inc of combo.includes) {
-          if (!inc.productId) continue;
-          const incPid = toId(String(inc.productId));
-          if (!incPid) continue;
-          const incProduct = await productsCol.findOne({ _id: incPid }, { projection: { name: 1, unit: 1 } });
-          if (!incProduct) {
-            logger.warn({ comboId: String(pid), includeProductId: String(inc.productId) }, "expandOrderItems: included product not found in sub-hub products — skipping");
-            continue;
-          }
-          const key = String(incPid);
+    let resolved = false;
+
+    // ── Path A: productId-based lookup ──────────────────────────────────────
+    if (it.productId) {
+      const pid = toId(String(it.productId));
+      if (pid) {
+        const isRealProduct = await productsCol.findOne({ _id: pid }, { projection: { _id: 1 } });
+        if (isRealProduct) {
+          const key = String(pid);
           const entry = aggregated.get(key);
-          // Each included product has its own quantity-per-combo (defaults to 1 if not set).
-          // Total deduction = orderedComboQty × quantityPerCombo
-          const qtyPerCombo = Math.max(1, Number(inc.quantity) || 1);
-          const totalDeduct = qty * qtyPerCombo;
-          if (entry) entry.quantity += totalDeduct;
-          else aggregated.set(key, { productId: key, name: incProduct.name ?? inc.label ?? "", quantity: totalDeduct, unit: incProduct.unit ?? "" });
+          if (entry) entry.quantity += qty;
+          else aggregated.set(key, { productId: key, name: it.name ?? "", quantity: qty, unit: it.unit ?? "" });
+          resolved = true;
+        } else {
+          // Not a product — try combo by _id
+          const comboById = await combosCol.findOne({ _id: pid });
+          if (comboById) {
+            resolved = await expandCombo(comboById, qty);
+            if (!resolved) {
+              logger.warn({ productId: String(pid), comboName: comboById.name }, "expandOrderItems: combo found by id but has no includes — skipping");
+              resolved = true; // don't attempt name fallback for an explicitly matched combo
+            }
+          }
         }
-      } else {
-        logger.warn({ productId: String(pid), comboFound: !!combo, includeCount: combo?.includes?.length ?? 0 }, "expandOrderItems: item not found as product or combo with includes — skipping");
       }
+    }
+
+    // ── Path B: name-based combo lookup (fallback when no productId or ID miss) ──
+    if (!resolved && it.name) {
+      const nameTrimmed = String(it.name).trim();
+      const comboByName = await combosCol.findOne({ name: { $regex: `^${nameTrimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } });
+      if (comboByName) {
+        resolved = await expandCombo(comboByName, qty);
+        if (!resolved) {
+          logger.warn({ itemName: nameTrimmed, comboId: String(comboByName._id) }, "expandOrderItems: combo found by name but has no includes — skipping");
+          resolved = true;
+        }
+      }
+    }
+
+    // ── Path C: name-based product lookup (last resort) ─────────────────────
+    if (!resolved && it.name) {
+      const nameTrimmed = String(it.name).trim();
+      const productByName = await productsCol.findOne({ name: { $regex: `^${nameTrimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } });
+      if (productByName) {
+        const key = String(productByName._id);
+        const entry = aggregated.get(key);
+        if (entry) entry.quantity += qty;
+        else aggregated.set(key, { productId: key, name: productByName.name ?? nameTrimmed, quantity: qty, unit: productByName.unit ?? it.unit ?? "" });
+        resolved = true;
+        logger.info({ itemName: nameTrimmed, productId: key }, "expandOrderItems: resolved item to product by name");
+      }
+    }
+
+    if (!resolved) {
+      logger.warn({ productId: it.productId, itemName: it.name }, "expandOrderItems: item could not be resolved to any product or combo — skipping");
     }
   }
 
