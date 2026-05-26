@@ -651,23 +651,70 @@ function orderShouldDeduct(order: OrderForSync) {
   return ACTIVE_STATUSES.has(status);
 }
 
+/** Expand raw order items so that any combo productId is replaced by its constituent products.
+ * Quantities are aggregated per product so that two combos sharing a product get combined. */
+async function expandOrderItems(
+  productsCol: any,
+  combosCol: any,
+  rawItems: Array<{ productId?: string; name?: string; quantity?: number; unit?: string }>,
+): Promise<Array<{ productId: string; name: string; quantity: number; unit: string }>> {
+  const aggregated = new Map<string, { productId: string; name: string; quantity: number; unit: string }>();
+
+  for (const it of rawItems) {
+    if (!it.productId) continue;
+    const pid = toId(String(it.productId));
+    if (!pid) continue;
+    const qty = Math.max(0, Number(it.quantity) || 0);
+    if (qty <= 0) continue;
+
+    const isRealProduct = await productsCol.findOne({ _id: pid }, { projection: { _id: 1 } });
+    if (isRealProduct) {
+      const key = String(pid);
+      const entry = aggregated.get(key);
+      if (entry) entry.quantity += qty;
+      else aggregated.set(key, { productId: key, name: it.name ?? "", quantity: qty, unit: it.unit ?? "" });
+    } else {
+      // Not found in products — check if it is a combo and expand its includes
+      const combo = await combosCol.findOne({ _id: pid });
+      if (combo && Array.isArray(combo.includes)) {
+        for (const inc of combo.includes) {
+          if (!inc.productId) continue;
+          const incPid = toId(String(inc.productId));
+          if (!incPid) continue;
+          const incProduct = await productsCol.findOne({ _id: incPid }, { projection: { name: 1, unit: 1 } });
+          if (!incProduct) continue;
+          const key = String(incPid);
+          const entry = aggregated.get(key);
+          // Each combo ordered deducts 1 unit of each included product × ordered qty
+          if (entry) entry.quantity += qty;
+          else aggregated.set(key, { productId: key, name: incProduct.name ?? inc.label ?? "", quantity: qty, unit: incProduct.unit ?? "" });
+        }
+      }
+    }
+  }
+
+  return Array.from(aggregated.values());
+}
+
 async function applyDelta(order: OrderForSync, direction: "deduct" | "restore") {
   if (!order.subHubId) return;
   const sub = await SubHub.findById(order.subHubId);
   if (!sub?.dbName) return;
   const conn = await getSubHubDbConnection(sub.dbName);
   const products = conn.db.collection("products");
+  const combos = conn.db.collection("combos");
   const movements = conn.db.collection(MOVEMENTS_COLLECTION);
   const now = new Date();
   const orderId = String(order._id);
   const orderRef = `#${orderId.slice(-6).toUpperCase()}`;
-  const items = Array.isArray(order.items) ? order.items : [];
+
+  // Expand combos into their constituent products before applying stock changes
+  const items = await expandOrderItems(products, combos, Array.isArray(order.items) ? order.items : []);
 
   for (const it of items) {
-    if (!it.productId) continue;
-    const pid = toId(String(it.productId));
+    const pid = toId(it.productId);
     if (!pid) continue;
-    const qty = Math.max(0, Number(it.quantity) || 0);
+    const qty = it.quantity;
     if (qty <= 0) continue;
 
     const existing = await products.findOne({ _id: pid });
