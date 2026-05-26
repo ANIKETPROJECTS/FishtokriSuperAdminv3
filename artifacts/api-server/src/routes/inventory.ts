@@ -5,6 +5,7 @@ import { SuperHub } from "../db/models/super-hub.js";
 import { getSubHubDbConnection } from "../db/sub-hub-connections.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { loadScope, type ScopedRequest } from "../middlewares/scope.js";
+import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 router.use(requireAuth as any);
@@ -696,10 +697,20 @@ async function expandOrderItems(
   return Array.from(aggregated.values());
 }
 
-async function applyDelta(order: OrderForSync, direction: "deduct" | "restore") {
-  if (!order.subHubId) return;
+async function applyDelta(order: OrderForSync, direction: "deduct" | "restore"): Promise<number> {
+  if (!order.subHubId) {
+    logger.warn({ orderId: String(order._id) }, "applyDelta: skipped — no subHubId on order");
+    return 0;
+  }
   const sub = await SubHub.findById(order.subHubId);
-  if (!sub?.dbName) return;
+  if (!sub) {
+    logger.warn({ orderId: String(order._id), subHubId: order.subHubId }, "applyDelta: skipped — subHub not found");
+    return 0;
+  }
+  if (!sub.dbName) {
+    logger.warn({ orderId: String(order._id), subHubId: order.subHubId }, "applyDelta: skipped — subHub has no dbName");
+    return 0;
+  }
   const conn = await getSubHubDbConnection(sub.dbName);
   const products = conn.db.collection("products");
   const combos = conn.db.collection("combos");
@@ -710,7 +721,12 @@ async function applyDelta(order: OrderForSync, direction: "deduct" | "restore") 
 
   // Expand combos into their constituent products before applying stock changes
   const items = await expandOrderItems(products, combos, Array.isArray(order.items) ? order.items : []);
+  if (items.length === 0) {
+    logger.warn({ orderId, subHubId: order.subHubId, rawItemCount: (order.items ?? []).length }, "applyDelta: no items to process after expansion");
+    return 0;
+  }
 
+  let deductedCount = 0;
   for (const it of items) {
     const pid = toId(it.productId);
     if (!pid) continue;
@@ -748,6 +764,7 @@ async function applyDelta(order: OrderForSync, direction: "deduct" | "restore") 
           change: -qty, balance: Number((after as any)?.quantity) || 0,
           orderId, orderRef, createdAt: now,
         });
+        deductedCount++;
         continue;
       }
     } else {
@@ -774,7 +791,10 @@ async function applyDelta(order: OrderForSync, direction: "deduct" | "restore") 
       expiryDate: appliedExpiry || undefined,
       createdAt: now,
     });
+    deductedCount++;
   }
+  logger.info({ orderId, direction, deductedCount }, "applyDelta: completed");
+  return deductedCount;
 }
 
 /**
@@ -802,33 +822,43 @@ export async function autoDeductUndedcutedOrders(
       );
       if (!claimed) continue; // another request already claimed it
       // Run the actual stock deduction
-      await applyDelta(
+      const deducted = await applyDelta(
         { _id: order._id, subHubId: order.subHubId, subHubName: order.subHubName, status: order.status, items: order.items },
         "deduct"
       );
-    } catch {
+      // If nothing was actually deducted, revert the flag so it can be retried
+      if (deducted === 0) {
+        await ordersDb.collection("orders").updateOne(
+          { _id: order._id },
+          { $set: { inventoryDeducted: false } }
+        );
+      }
+    } catch (err) {
+      logger.error({ err, orderId: String(order._id) }, "autoDeductUndedcutedOrders: failed to deduct inventory");
       // Revert the flag so it can be retried next time
       try {
         await ordersDb.collection("orders").updateOne(
           { _id: order._id },
           { $set: { inventoryDeducted: false } }
         );
-      } catch { /* best-effort */ }
+      } catch (e2) {
+        logger.error({ err: e2, orderId: String(order._id) }, "autoDeductUndedcutedOrders: failed to revert inventoryDeducted flag");
+      }
     }
   }
 }
 
 export async function applyOrderInventoryOnCreate(order: OrderForSync) {
   if (!orderShouldDeduct(order)) return false;
-  await applyDelta(order, "deduct");
-  return true;
+  const deducted = await applyDelta(order, "deduct");
+  return deducted > 0;
 }
 
 export async function applyOrderInventoryOnDelete(order: OrderForSync, wasDeducted: boolean) {
   if (!wasDeducted) return false;
   if (!order?.subHubId) return false;
-  await applyDelta(order, "restore");
-  return true;
+  const restored = await applyDelta(order, "restore");
+  return restored > 0;
 }
 
 function itemsSignature(items: any): string {
