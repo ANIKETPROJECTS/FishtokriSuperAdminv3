@@ -75,6 +75,103 @@ function toId(id: string): mongoose.mongo.BSON.ObjectId | null {
   try { return new mongoose.mongo.ObjectId(id); } catch { return null; }
 }
 
+/**
+ * Normalizes coupon data from an order document into a flat array.
+ * Handles both the multi-coupon `coupons[]` format and the legacy
+ * single-coupon `couponId / couponCode / couponTitle` fields.
+ */
+function extractOrderCoupons(order: any): Array<{ couponId: string; couponCode: string; couponTitle: string }> {
+  const result: Array<{ couponId: string; couponCode: string; couponTitle: string }> = [];
+  if (Array.isArray(order.coupons) && order.coupons.length > 0) {
+    for (const c of order.coupons) {
+      const id = String(c?.id ?? c?._id ?? c?.couponId ?? "").trim();
+      if (id) result.push({
+        couponId: id,
+        couponCode: String(c?.code ?? c?.couponCode ?? "").trim(),
+        couponTitle: String(c?.title ?? c?.name ?? c?.couponTitle ?? "").trim(),
+      });
+    }
+  }
+  if (result.length === 0 && order.couponId) {
+    result.push({
+      couponId: String(order.couponId).trim(),
+      couponCode: String(order.couponCode ?? "").trim(),
+      couponTitle: String(order.couponTitle ?? "").trim(),
+    });
+  }
+  return result;
+}
+
+/** Statuses where the order is live (not yet delivered or cancelled). */
+const ACTIVE_ORDER_STATUSES = new Set(["pending", "confirmed", "out_for_delivery", "takeaway"]);
+
+/**
+ * Syncs a customer's activeCoupons / usedCoupons arrays whenever an order's
+ * status changes. All coupon state transitions live here so the logic is in
+ * one place and easy to audit.
+ *
+ *  active   → delivered  : activeCoupons → usedCoupons  (coupon permanently consumed)
+ *  active   → cancelled  : remove from activeCoupons    (coupon released)
+ *  delivered→ active     : usedCoupons → activeCoupons  (un-deliver edge-case)
+ *  delivered→ cancelled  : remove from usedCoupons      (order voided after delivery)
+ *  cancelled→ active     : add back to activeCoupons    (un-cancel)
+ *  cancelled→ delivered  : add directly to usedCoupons  (rare direct jump)
+ */
+async function syncCustomerCouponsOnStatusChange(
+  cCol: any,
+  customerId: string,
+  orderId: string,
+  orderCoupons: Array<{ couponId: string; couponCode: string; couponTitle: string }>,
+  prevStatus: string,
+  newStatus: string,
+  subHubId: string,
+  log: any,
+) {
+  if (!customerId || orderCoupons.length === 0 || prevStatus === newStatus) return;
+  const cid = toId(customerId);
+  if (!cid) return;
+
+  const prevActive = ACTIVE_ORDER_STATUSES.has(prevStatus);
+  const prevDelivered = prevStatus === "delivered";
+  const prevCancelled = prevStatus === "cancelled";
+  const newActive = ACTIVE_ORDER_STATUSES.has(newStatus);
+  const newDelivered = newStatus === "delivered";
+  const newCancelled = newStatus === "cancelled";
+
+  try {
+    if ((prevActive || prevDelivered) && newDelivered && !prevDelivered) {
+      // ✅ Order delivered → lock coupon permanently in usedCoupons
+      await cCol.updateOne({ _id: cid }, { $pull: { activeCoupons: { orderId } } });
+      const entries = orderCoupons.map((c) => ({ ...c, orderId, subHubId: subHubId ?? "", usedAt: new Date() }));
+      await cCol.updateOne({ _id: cid }, { $push: { usedCoupons: { $each: entries } } });
+      log.info({ customerId, orderId }, "Coupon lifecycle: activeCoupons → usedCoupons (delivered)");
+    } else if (prevDelivered && newActive) {
+      // ↩️ Un-deliver → move coupon back to activeCoupons so it's still blocked
+      await cCol.updateOne({ _id: cid }, { $pull: { usedCoupons: { orderId } } });
+      const entries = orderCoupons.map((c) => ({ ...c, orderId, subHubId: subHubId ?? "", appliedAt: new Date() }));
+      await cCol.updateOne({ _id: cid }, { $push: { activeCoupons: { $each: entries } } });
+      log.info({ customerId, orderId }, "Coupon lifecycle: usedCoupons → activeCoupons (un-delivered)");
+    } else if ((prevActive || prevDelivered) && newCancelled) {
+      // ❌ Order cancelled → release the coupon entirely
+      await cCol.updateOne({ _id: cid }, { $pull: { activeCoupons: { orderId } } });
+      await cCol.updateOne({ _id: cid }, { $pull: { usedCoupons: { orderId } } });
+      log.info({ customerId, orderId }, "Coupon lifecycle: removed from activeCoupons/usedCoupons (cancelled)");
+    } else if (prevCancelled && newActive) {
+      // 🔄 Un-cancel → re-lock coupon in activeCoupons
+      const entries = orderCoupons.map((c) => ({ ...c, orderId, subHubId: subHubId ?? "", appliedAt: new Date() }));
+      await cCol.updateOne({ _id: cid }, { $push: { activeCoupons: { $each: entries } } });
+      log.info({ customerId, orderId }, "Coupon lifecycle: added back to activeCoupons (un-cancelled)");
+    } else if (prevCancelled && newDelivered) {
+      // Rare: cancelled → delivered directly
+      const entries = orderCoupons.map((c) => ({ ...c, orderId, subHubId: subHubId ?? "", usedAt: new Date() }));
+      await cCol.updateOne({ _id: cid }, { $push: { usedCoupons: { $each: entries } } });
+      log.info({ customerId, orderId }, "Coupon lifecycle: added to usedCoupons (cancelled→delivered)");
+    }
+  } catch (e) {
+    log.error({ err: e, customerId, orderId }, "Failed to sync customer coupon lifecycle");
+  }
+}
+
 /** Returns today's date string in YYYYMMDD format using IST (UTC+5:30). */
 function getTodayIST(): string {
   const now = new Date();
@@ -732,6 +829,28 @@ router.post("/", async (req: ScopedRequest, res) => {
       }
     }
 
+    // Track coupon in customer's activeCoupons so it can't be reused on the next order.
+    const orderCouponsOnCreate = extractOrderCoupons(orderDoc);
+    if (orderCouponsOnCreate.length > 0 && resolvedCustomerId && orderDoc.status !== "cancelled") {
+      try {
+        const cCol = await getCustomersCollection();
+        const orderId = String(result.insertedId);
+        const entries = orderCouponsOnCreate.map((c) => ({
+          ...c,
+          orderId,
+          subHubId: orderDoc.subHubId ?? "",
+          appliedAt: new Date(),
+        }));
+        await cCol.updateOne(
+          { _id: toId(resolvedCustomerId) },
+          { $push: { activeCoupons: { $each: entries } } },
+        );
+        req.log.info({ customerId: resolvedCustomerId, orderId, coupons: entries.length }, "Coupon lifecycle: added to activeCoupons on order create");
+      } catch (e) {
+        req.log.error({ err: e }, "Failed to add coupon to activeCoupons on order create");
+      }
+    }
+
     res.status(201).json({ order: { ...orderDoc, _id: result.insertedId } });
   } catch (err) {
     req.log.error({ err }, "Failed to create order");
@@ -960,6 +1079,21 @@ router.put("/:id", async (req: ScopedRequest, res) => {
       }
     }
 
+    // Sync customer's activeCoupons / usedCoupons when order status changes.
+    if (status !== undefined && status !== prev.status && (result as any).customerId) {
+      const orderCouponsOnUpdate = extractOrderCoupons(prev);
+      await syncCustomerCouponsOnStatusChange(
+        await getCustomersCollection(),
+        String((result as any).customerId),
+        String(oid),
+        orderCouponsOnUpdate,
+        String(prev.status ?? ""),
+        String(status),
+        String((result as any).subHubId ?? ""),
+        req.log,
+      );
+    }
+
     // If the payments list was touched, re-sync this order's banking payments.
     if (Array.isArray(payments) || clearPayments) {
       try {
@@ -1007,6 +1141,29 @@ router.delete("/:id", async (req: ScopedRequest, res) => {
       await syncOrderBankPayments({ orderId: req.params.id, payments: [] });
     } catch (e) {
       req.log.error({ err: e }, "Failed to remove order payments from banking");
+    }
+
+    // Release coupon locks when an order is deleted.
+    // If the order was already delivered, keep the usedCoupons entry (it's history).
+    // For any other status, remove from activeCoupons so the coupon can be reused.
+    if ((existing as any).customerId) {
+      try {
+        const deletedCoupons = extractOrderCoupons(existing);
+        if (deletedCoupons.length > 0) {
+          const cCol = await getCustomersCollection();
+          const orderId = req.params.id;
+          const wasDelivered = (existing as any).status === "delivered";
+          if (!wasDelivered) {
+            await cCol.updateOne(
+              { _id: toId(String((existing as any).customerId)) },
+              { $pull: { activeCoupons: { orderId } } },
+            );
+            req.log.info({ customerId: (existing as any).customerId, orderId }, "Coupon lifecycle: removed from activeCoupons on order delete");
+          }
+        }
+      } catch (e) {
+        req.log.error({ err: e }, "Failed to clean up coupon on order delete");
+      }
     }
 
     res.json({ success: true });

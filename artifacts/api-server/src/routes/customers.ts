@@ -88,6 +88,7 @@ const customerSchema = new mongoose.Schema(
     addresses: { type: Array, default: [] },
     orders: { type: Array, default: [] },
     usedCoupons: { type: Array, default: [] },
+    activeCoupons: { type: Array, default: [] },
   },
   { timestamps: true, strict: false }
 );
@@ -109,6 +110,7 @@ function serializeCustomer(doc: any) {
     addresses: doc.addresses ?? [],
     orders: doc.orders ?? [],
     usedCoupons: doc.usedCoupons ?? [],
+    activeCoupons: doc.activeCoupons ?? [],
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };

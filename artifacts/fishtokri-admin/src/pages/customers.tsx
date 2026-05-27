@@ -65,6 +65,7 @@ interface Customer {
   addresses: any[];
   orders: any[];
   usedCoupons?: any[];
+  activeCoupons?: any[];
   currentOrders?: any[];
   orderHistory?: any[];
   createdAt: string;
@@ -826,6 +827,11 @@ function CustomerDetailPage({
             <OrderList orders={history} empty="No completed or past orders found for this customer." />
           </CollapsibleDetailSection>
 
+          {/* Active Coupons — locked in pending/in-progress orders */}
+          <CollapsibleDetailSection title={`Active Coupons (${fullCustomer.activeCoupons?.length ?? 0})`} icon={Tag} defaultOpen={!!fullCustomer.activeCoupons?.length}>
+            <ActiveCouponsList coupons={fullCustomer.activeCoupons ?? []} />
+          </CollapsibleDetailSection>
+
           {/* Used Coupons */}
           <CollapsibleDetailSection title={`Used Coupons (${fullCustomer.usedCoupons?.length ?? 0})`} icon={Tag} defaultOpen>
             <UsedCouponsList coupons={fullCustomer.usedCoupons ?? []} />
@@ -870,6 +876,40 @@ function CollapsibleDetailSection({ title, icon: Icon, children, defaultOpen = t
       </button>
       {open && <div className="px-5 pb-5">{children}</div>}
     </section>
+  );
+}
+
+function ActiveCouponsList({ coupons }: { coupons: any[] }) {
+  if (!coupons.length) {
+    return <p className="text-xs text-gray-400 py-2">No coupons currently locked in active orders.</p>;
+  }
+  return (
+    <div className="space-y-2">
+      {coupons.map((c: any, i: number) => {
+        const code = c.couponCode || c.code || "—";
+        const title = c.couponTitle || c.title || "";
+        const orderId = c.orderId || "";
+        const appliedAt = c.appliedAt ? new Date(c.appliedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "";
+        return (
+          <div key={i} className="rounded-xl border border-amber-100 bg-amber-50 p-3.5 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Tag className="w-3.5 h-3.5 text-amber-600" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-block bg-amber-100 text-amber-800 text-sm font-bold px-2.5 py-0.5 rounded-lg tracking-wider font-mono border border-amber-200">{code}</span>
+                <span className="inline-block bg-amber-50 text-amber-700 text-[11px] font-medium px-2 py-0.5 rounded-full border border-amber-200">Locked — order in progress</span>
+              </div>
+              {title && <p className="text-xs text-gray-600">{title}</p>}
+              <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-gray-500">
+                {orderId && <span>Order: <span className="font-mono text-gray-700">{String(orderId).slice(-8).toUpperCase()}</span></span>}
+                {appliedAt && <span>Applied: {appliedAt}</span>}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
