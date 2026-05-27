@@ -32,6 +32,8 @@ Each document looks like:
 
 `maxUsage` is the maximum number of times **a single customer** can use this coupon. `null` or missing means unlimited.
 
+> **Important:** The coupon document does NOT store a `usedCount` field. Usage is tracked entirely in the customer document (`activeCoupons` + `usedCoupons`). This keeps the coupon document as a pure definition and avoids race conditions when multiple customers use the same coupon simultaneously.
+
 ---
 
 ### 2. Customer coupon usage

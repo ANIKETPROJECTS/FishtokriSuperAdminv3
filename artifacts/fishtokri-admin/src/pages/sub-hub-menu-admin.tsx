@@ -1747,7 +1747,6 @@ function CouponsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (c
   const sortOptions: SortOption[] = [
     { value: "code_asc", label: "Code A→Z" },
     { value: "discount_desc", label: "Discount High→Low" },
-    { value: "used_desc", label: "Most Used" },
     { value: "minorder_asc", label: "Min Order Low→High" },
     { value: "expiry_asc", label: "Expiry Soonest" },
   ];
@@ -1767,7 +1766,6 @@ function CouponsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (c
     items.sort((a, b) => {
       if (sortValue === "code_asc") return (a.code ?? "").localeCompare(b.code ?? "");
       if (sortValue === "discount_desc") return (b.discountValue ?? 0) - (a.discountValue ?? 0);
-      if (sortValue === "used_desc") return (b.usedCount ?? 0) - (a.usedCount ?? 0);
       if (sortValue === "minorder_asc") return (a.minOrderAmount ?? 0) - (b.minOrderAmount ?? 0);
       if (sortValue === "expiry_asc") return new Date(a.expiresAt ?? "9999").getTime() - new Date(b.expiresAt ?? "9999").getTime();
       return 0;
@@ -1820,7 +1818,7 @@ function CouponsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (c
               <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</th>
               <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Discount</th>
               <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Min Order</th>
-              <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Used</th>
+              <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Max Uses</th>
               <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Expires</th>
               <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
               <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Actions</th>
@@ -1835,7 +1833,7 @@ function CouponsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: (c
                   <td className="px-4 py-3 capitalize text-gray-500 text-xs">{c.type}</td>
                   <td className="px-4 py-3 font-semibold text-[#162B4D]">{c.type === "percentage" ? `${c.discountValue}%` : `₹${c.discountValue}`}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">₹{c.minOrderAmount}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{c.usedCount ?? 0}{c.maxUsage ? ` / ${c.maxUsage}` : ""}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{c.maxUsage ? `${c.maxUsage} per customer` : "Unlimited"}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{c.expiresAt ? new Date(c.expiresAt).toLocaleDateString("en-IN") : "No expiry"}</td>
                   <td className="px-4 py-3"><StatusBadge active={c.isActive !== false} /></td>
                   <td className="px-4 py-3"><ActionButtons onEdit={() => { setEditing(c); setModalOpen(true); }} onDelete={() => setDeleteId(String(c._id))} /></td>

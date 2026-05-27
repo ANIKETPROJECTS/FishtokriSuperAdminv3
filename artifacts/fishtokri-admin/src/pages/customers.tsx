@@ -937,12 +937,9 @@ function UsedCouponsList({ coupons }: { coupons: any[] }) {
     }
     if (locationFilter !== "all") result = result.filter((c) => (c.location || c.subHub || c.area || "") === locationFilter);
     result = [...result].sort((a, b) => {
-      const aUsed = a.usedCount ?? a.used ?? 0;
-      const bUsed = b.usedCount ?? b.used ?? 0;
-      if (sort === "used_asc") return aUsed - bUsed;
-      if (sort === "code_asc") return (a.code || "").localeCompare(b.code || "");
-      if (sort === "recent") return new Date(b.lastUsedAt || 0).getTime() - new Date(a.lastUsedAt || 0).getTime();
-      return bUsed - aUsed;
+      if (sort === "code_asc") return (a.code || a.couponCode || "").localeCompare(b.code || b.couponCode || "");
+      if (sort === "recent") return new Date(b.usedAt || b.lastUsedAt || 0).getTime() - new Date(a.usedAt || a.lastUsedAt || 0).getTime();
+      return new Date(b.usedAt || b.lastUsedAt || 0).getTime() - new Date(a.usedAt || a.lastUsedAt || 0).getTime();
     });
     return result;
   }, [coupons, search, sort, locationFilter]);
@@ -960,8 +957,6 @@ function UsedCouponsList({ coupons }: { coupons: any[] }) {
         </div>
         <select value={sort} onChange={(e) => setSort(e.target.value)}
           className="h-7 px-2 text-xs border border-gray-200 rounded-lg bg-white text-black outline-none focus:ring-1 focus:ring-[#1A56DB]">
-          <option value="used_desc">Most used</option>
-          <option value="used_asc">Least used</option>
           <option value="recent">Recently used</option>
           <option value="code_asc">Code (A → Z)</option>
         </select>
@@ -981,17 +976,14 @@ function UsedCouponsList({ coupons }: { coupons: any[] }) {
         <div className={layout === "grid" ? "grid grid-cols-1 md:grid-cols-2 gap-3" : "space-y-2"}>
           {filtered.map((coupon: any, index: number) => {
             const code = coupon.code || coupon.couponCode || "—";
-            const usedCount = coupon.usedCount ?? coupon.used ?? 0;
-            const maxAllowed = coupon.maxAllowed ?? coupon.maxUses ?? null;
             const location = coupon.location || coupon.subHub || coupon.area || "";
-            const lastUsedAt = coupon.lastUsedAt || coupon.lastUsed || "";
+            const lastUsedAt = coupon.usedAt || coupon.lastUsedAt || coupon.lastUsed || "";
             return (
               <div key={index} className="rounded-xl border border-gray-100 bg-white p-4 flex items-start gap-3">
                 <div className="w-9 h-9 rounded-lg bg-green-50 flex items-center justify-center flex-shrink-0 mt-0.5"><Tag className="w-4 h-4 text-green-600" /></div>
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="inline-block bg-green-50 text-green-700 text-sm font-bold px-2.5 py-1 rounded-lg tracking-wider font-mono border border-green-100">{code}</span>
-                    <span className="inline-block bg-gray-50 text-black text-xs font-medium px-2 py-0.5 rounded-full border border-gray-100">Used {usedCount} time{usedCount !== 1 ? "s" : ""}{maxAllowed !== null ? ` / ${maxAllowed} max` : ""}</span>
                   </div>
                   {location && <div className="flex items-center gap-1 text-xs text-black"><MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" /><span>{location}</span></div>}
                   {lastUsedAt && <div className="flex items-center gap-1 text-xs text-black"><Clock className="w-3 h-3 flex-shrink-0" /><span>Last used: {formatDateTime(lastUsedAt)}</span></div>}

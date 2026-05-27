@@ -400,7 +400,6 @@ router.post("/coupons", async (req, res) => {
       type: type ?? "percentage",
       discountValue: Number(discountValue) || 0,
       minOrderAmount: Number(minOrderAmount) || 0,
-      usedCount: 0,
       isFirstTimeOnly: isFirstTimeOnly === true,
       applicableCategories: Array.isArray(applicableCategories) ? applicableCategories : [],
       applicableProducts: Array.isArray(applicableProducts) ? applicableProducts : [],
@@ -1110,7 +1109,7 @@ router.post("/coupons/bulk-upsert", async (req, res) => {
         else {
           const existing = await ctx.conn.db.collection("coupons").findOne({ code: { $regex: `^${code}$`, $options: "i" } });
           if (existing) { await ctx.conn.db.collection("coupons").updateOne({ _id: existing._id }, { $set: fields }); updated++; }
-          else { await ctx.conn.db.collection("coupons").insertOne({ ...fields, usedCount: 0, applicableCategories: [], applicableProducts: [], createdAt: new Date() }); created++; }
+          else { await ctx.conn.db.collection("coupons").insertOne({ ...fields, applicableCategories: [], applicableProducts: [], createdAt: new Date() }); created++; }
         }
       } catch (e: any) { errors.push(e.message); }
     }
