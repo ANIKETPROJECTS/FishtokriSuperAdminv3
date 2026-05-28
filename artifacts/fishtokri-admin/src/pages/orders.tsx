@@ -191,6 +191,27 @@ function formatTimeSlot(o: any): string | null {
   return null;
 }
 
+/** Returns today's date as YYYY-MM-DD in IST (UTC+5:30). */
+function getTodayIST() {
+  const now = new Date();
+  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  const y = ist.getUTCFullYear();
+  const mo = String(ist.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(ist.getUTCDate()).padStart(2, "0");
+  return `${y}-${mo}-${d}`;
+}
+
+/** Returns tomorrow's date as YYYY-MM-DD in IST. */
+function getTomorrowIST() {
+  const now = new Date();
+  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  ist.setUTCDate(ist.getUTCDate() + 1);
+  const y = ist.getUTCFullYear();
+  const mo = String(ist.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(ist.getUTCDate()).padStart(2, "0");
+  return `${y}-${mo}-${d}`;
+}
+
 function formatDate(d: any) {
   if (!d) return "—";
   return new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -903,7 +924,7 @@ export default function Orders() {
   const [loadingTimeslots, setLoadingTimeslots] = useState(false);
   const [selectedTimeslotId, setSelectedTimeslotId] = useState<string>("");
   const [orderScheduleType, setOrderScheduleType] = useState<"instant" | "slot">("slot");
-  const [orderDate, setOrderDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [orderDate, setOrderDate] = useState<string>(() => getTodayIST());
   const [isOutstationDelivery, setIsOutstationDelivery] = useState(false);
 
   // Payment
@@ -935,7 +956,7 @@ export default function Orders() {
     setAppliedCouponIds([]); setCouponCode(""); setCouponError("");
     setSelectedTimeslotId("");
     setOrderScheduleType("slot");
-    setOrderDate(new Date().toISOString().slice(0, 10));
+    setOrderDate(getTodayIST());
     setIsOutstationDelivery(false);
     setPaymentStatus("unpaid");
     setPaymentEntries([]);
@@ -1110,15 +1131,17 @@ export default function Orders() {
   }, [selectedProducts, subHubProducts]);
 
   const activeTimeslots = useMemo(() => {
-    const todayISO = new Date().toISOString().slice(0, 10);
+    const todayISO = getTodayIST();
     const isToday = orderDate === todayISO;
     return timeslots.filter((t) => {
       if (t.isActive === false) return false;
-      // Hide slots that have hit their order limit for the selected date
+      // Hide slots that have hit their order limit for the selected date.
+      // todaysOrderCount / nextDayOrderCount are computed live by the backend —
+      // no stale date guard needed.
       const limit = Number(t.orderLimit) || 0;
       if (limit > 0) {
-        if (isToday && t.todaysOrderDate === todayISO && (t.todaysOrderCount ?? 0) >= limit) return false;
-        if (!isToday && t.nextDayOrderDate === orderDate && (t.nextDayOrderCount ?? 0) >= limit) return false;
+        if (isToday && (t.todaysOrderCount ?? 0) >= limit) return false;
+        if (!isToday && (t.nextDayOrderCount ?? 0) >= limit) return false;
       }
       if (!isToday) return true;
       const match = (t.startTime ?? "").match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -1129,7 +1152,8 @@ export default function Orders() {
       if (match[3].toUpperCase() === "AM" && h === 12) h = 0;
       const slotStartMins = h * 60 + m;
       const now = new Date();
-      const currentMins = now.getHours() * 60 + now.getMinutes();
+      const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+      const currentMins = istNow.getUTCHours() * 60 + istNow.getUTCMinutes();
       return slotStartMins > currentMins;
     });
   }, [timeslots, orderDate]);
@@ -3121,7 +3145,29 @@ export default function Orders() {
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm font-normal text-gray-900 flex items-center gap-1.5"><img src="/icon-schedule.png" className="w-4 h-4 object-contain" alt="" />Schedule</p>
                   </div>
-                  <Input type="date" value={orderDate} min={new Date().toISOString().slice(0, 10)} onChange={(e) => { setOrderDate(e.target.value); setSelectedTimeslotId(""); }} className="h-8 text-sm w-full mb-2" />
+                  {/* Today / Tomorrow selector — only these two days are bookable */}
+                  <div className="flex gap-2 mb-2">
+                    {[
+                      { label: "Today", value: getTodayIST() },
+                      { label: "Tomorrow", value: getTomorrowIST() },
+                    ].map(({ label, value }) => {
+                      const isSelected = orderDate === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => { setOrderDate(value); setSelectedTimeslotId(""); }}
+                          className={`flex-1 h-9 rounded-lg border text-sm font-semibold transition-all ${
+                            isSelected
+                              ? "border-[#1A56DB] bg-blue-50 text-[#1A56DB]"
+                              : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
                   {orderScheduleType === "slot" && (
                     loadingTimeslots ? <p className="text-xs text-gray-400">Loading slots...</p>
                     : activeTimeslots.length === 0 ? <p className="text-xs text-amber-600 flex items-center gap-1"><Zap className="w-3 h-3" />No slots available for this date</p>
