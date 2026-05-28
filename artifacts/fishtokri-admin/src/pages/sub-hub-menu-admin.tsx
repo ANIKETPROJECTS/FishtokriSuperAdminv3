@@ -116,6 +116,28 @@ function emptyBatch(): BatchForm {
   return { batchNumber: "", quantity: "0", shelfLifeDays: "", receivedDate: new Date().toISOString().slice(0, 10), expiryDate: "", notes: "" };
 }
 
+function generateBatchPrefix(productName: string): string {
+  const words = productName.trim().toUpperCase().replace(/[^A-Z\s]/g, "").split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "BAT";
+  if (words.length === 1) return words[0].slice(0, 3).padEnd(3, "X");
+  return (words[0].slice(0, 2) + words[1].slice(0, 2)).padEnd(4, "X");
+}
+
+function generateNextBatchNumber(productName: string, existingBatches: { batchNumber: string }[]): string {
+  const prefix = generateBatchPrefix(productName);
+  let maxNum = 0;
+  for (const b of existingBatches) {
+    if (b.batchNumber) {
+      const bn = b.batchNumber.toUpperCase();
+      if (bn.startsWith(prefix)) {
+        const num = parseInt(bn.slice(prefix.length), 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    }
+  }
+  return `${prefix}${String(maxNum + 1).padStart(2, "0")}`;
+}
+
 const TABS: { key: Tab; label: string; icon: any }[] = [
   { key: "products", label: "Products", icon: Package },
   { key: "categories", label: "Categories", icon: Tag },
@@ -2680,7 +2702,14 @@ function ProductModal({ isOpen, onClose, product, subHubId, categories, onSaved 
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2 after:flex-1 after:h-px after:bg-gray-100 after:ml-2">
                 Stock Batches ({batches.length}){batchesTotal > 0 && <span className="text-blue-600 font-bold normal-case">— Total: {batchesTotal}</span>}
               </p>
-              <button type="button" onClick={() => setBatches([...batches, emptyBatch()])} className="text-xs text-[#1A56DB] font-semibold flex items-center gap-1 hover:underline ml-4 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const autoNum = name.trim() ? generateNextBatchNumber(name, batches) : "";
+                  setBatches([...batches, { ...emptyBatch(), batchNumber: autoNum }]);
+                }}
+                className="text-xs text-[#1A56DB] font-semibold flex items-center gap-1 hover:underline ml-4 flex-shrink-0"
+              >
                 <Plus className="w-3 h-3" /> Add Batch
               </button>
             </div>
@@ -2700,8 +2729,8 @@ function ProductModal({ isOpen, onClose, product, subHubId, categories, onSaved 
                         <Input
                           value={b.batchNumber}
                           onChange={(e) => setBatches(batches.map((x, idx) => idx === i ? { ...x, batchNumber: e.target.value } : x))}
-                          placeholder="e.g. BATCH-1"
-                          className="h-8 text-xs"
+                          placeholder="Auto-generated"
+                          className="h-8 text-xs font-mono"
                         />
                       </div>
                       <div className="space-y-1">
