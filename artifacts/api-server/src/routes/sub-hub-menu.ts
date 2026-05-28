@@ -998,6 +998,22 @@ router.get("/timeslots", async (req, res) => {
           delete slot.todaysOrderDate;
           delete slot.nextDayOrderDate;
         }
+
+        // Persist computed counts back to MongoDB so the DB reflects reality.
+        const { ObjectId } = await import("mongodb");
+        const bulkOps = (timeslots as any[]).map((slot) => ({
+          updateOne: {
+            filter: { _id: new ObjectId(slot._id) },
+            update: {
+              $set: {
+                todaysOrderCount: slot.todaysOrderCount,
+                nextDayOrderCount: slot.nextDayOrderCount,
+              },
+              $unset: { todaysOrderDate: "", nextDayOrderDate: "" },
+            },
+          },
+        }));
+        await ctx.conn.db.collection("timeslots").bulkWrite(bulkOps, { ordered: false });
       } catch (e) {
         req.log.warn({ err: e }, "Failed to compute timeslot order counts (non-fatal)");
         for (const slot of timeslots as any[]) {
