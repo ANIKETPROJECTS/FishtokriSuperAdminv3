@@ -39,7 +39,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd artifacts/api-server && PORT=8080 pnpm run dev"
+args = "cd artifacts/api-server && pnpm run build && PORT=8080 pnpm run start"
 waitForPort = 8080
 
 [[workflows.workflow]]
@@ -75,3 +75,7 @@ PORT = "8080"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
