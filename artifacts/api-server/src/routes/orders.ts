@@ -88,17 +88,10 @@ async function syncTimeslotOrderLimit(subHubId: string | undefined, timeslotId: 
     const orderLimit = Number(timeslot.orderLimit) || 0;
     if (orderLimit <= 0) return;
     const ordersConn = await getOrdersDb();
-    const todayISO = getTodayISODate();
     const activeCount = await ordersConn.db.collection(COLLECTION).countDocuments({
       subHubId: subHubId,
       timeslotId: timeslotId,
-      status: { $ne: "cancelled" },
-      $or: [
-        { deliveryDate: todayISO },
-        { deliveryDate: null },
-        { deliveryDate: "" },
-        { deliveryDate: { $exists: false } },
-      ],
+      status: { $in: ["pending", "confirmed", "out_for_delivery", "takeaway"] },
     });
     const isLimited = activeCount >= orderLimit;
     const wasLimited = timeslot.limitedByOrders === true;
@@ -115,6 +108,54 @@ async function syncTimeslotOrderLimit(subHubId: string | undefined, timeslotId: 
     }
   } catch (_e) {
     // Non-fatal — timeslot sync should never break order flow
+  }
+}
+
+/**
+ * Scans every sub-hub's timeslots and syncs their isActive/limitedByOrders
+ * state against current active order counts. Run once at server startup to
+ * catch any state that drifted while the server was down.
+ */
+export async function syncAllTimeslotOrderLimits(): Promise<void> {
+  try {
+    const subHubs = await mongoose.connection.db.collection("sub_hubs").find({}).toArray();
+    const ordersConn = await getOrdersDb();
+    for (const subHub of subHubs) {
+      if (!subHub.dbName) continue;
+      try {
+        const subConn = await getSubHubDbConnection(subHub.dbName);
+        const timeslots = await subConn.db.collection("timeslots")
+          .find({ orderLimit: { $gt: 0 } })
+          .toArray();
+        for (const timeslot of timeslots) {
+          try {
+            const timeslotId = String(timeslot._id);
+            const subHubId = String(subHub._id);
+            const orderLimit = Number(timeslot.orderLimit) || 0;
+            const activeCount = await ordersConn.db.collection(COLLECTION).countDocuments({
+              subHubId: subHubId,
+              timeslotId: timeslotId,
+              status: { $in: ["pending", "confirmed", "out_for_delivery", "takeaway"] },
+            });
+            const isLimited = activeCount >= orderLimit;
+            const wasLimited = timeslot.limitedByOrders === true;
+            if (isLimited && !wasLimited) {
+              await subConn.db.collection("timeslots").updateOne(
+                { _id: timeslot._id },
+                { $set: { isActive: false, limitedByOrders: true, updatedAt: new Date() } }
+              );
+            } else if (!isLimited && wasLimited) {
+              await subConn.db.collection("timeslots").updateOne(
+                { _id: timeslot._id },
+                { $set: { isActive: true, limitedByOrders: false, updatedAt: new Date() } }
+              );
+            }
+          } catch (_e) { /* skip individual timeslot errors */ }
+        }
+      } catch (_e) { /* skip individual sub-hub errors */ }
+    }
+  } catch (_e) {
+    // Non-fatal
   }
 }
 
