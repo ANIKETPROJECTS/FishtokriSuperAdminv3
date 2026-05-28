@@ -195,6 +195,17 @@ function formatDate(d: any) {
   return new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function formatDeliveryDate(d: any) {
+  if (!d) return "—";
+  // deliveryDate is stored as "YYYY-MM-DD" string — parse without timezone shift
+  const s = String(d);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, day] = s.split("-");
+    return `${day} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][Number(m)-1]} ${y}`;
+  }
+  return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 function formatRupees(n: number) {
   return `₹${Number(n || 0).toLocaleString("en-IN")}`;
 }
@@ -264,11 +275,20 @@ function InvoiceModal({ order, onClose }: { order: any; onClose: () => void }) {
 
   const invoiceNo = order.orderId || ("INV-" + String(order._id).slice(-6).toUpperCase());
   const d = new Date(order.createdAt ?? Date.now());
-  const dateStr = [
-    String(d.getDate()).padStart(2, "0"),
-    String(d.getMonth() + 1).padStart(2, "0"),
-    d.getFullYear(),
-  ].join("-");
+  // Invoice "Date" = delivery date (what the order is for); "Time" = when order was placed
+  const deliveryDateStr = (() => {
+    const s = String(order.deliveryDate ?? "");
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const [y, m, day] = s.split("-");
+      return `${day}-${m}-${y}`;
+    }
+    return [
+      String(d.getDate()).padStart(2, "0"),
+      String(d.getMonth() + 1).padStart(2, "0"),
+      d.getFullYear(),
+    ].join("-");
+  })();
+  const dateStr = deliveryDateStr;
   const timeStr = d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
   const payMode =
     order.paymentMode ||
@@ -2306,7 +2326,10 @@ export default function Orders() {
                       <td className="px-3 py-4">
                         <p className="font-semibold text-black text-sm">{o.customerName}</p>
                         <p className="text-xs text-black">{o.phone}</p>
-                        <p className="text-xs text-black mt-1 whitespace-nowrap">{formatDate(o.createdAt)}</p>
+                        <p className="text-xs text-black mt-1 whitespace-nowrap">Placed: {formatDate(o.createdAt)}</p>
+                        {o.deliveryDate && (
+                          <p className="text-xs text-[#364F9F] font-semibold whitespace-nowrap">Delivery: {formatDeliveryDate(o.deliveryDate)}</p>
+                        )}
                         {o.orderId && (
                           <p className="text-[10px] font-mono font-bold text-[#364F9F] mt-0.5">{o.orderId}</p>
                         )}
@@ -3285,7 +3308,7 @@ export default function Orders() {
                     <p className="text-2xl font-extrabold text-[#364F9F] tracking-tight leading-none">
                       {formatOrderId(selectedOrder, dailySeqMap.get(String(selectedOrder._id)))}
                     </p>
-                    <p className="text-sm font-medium text-black mt-2">{formatDate(selectedOrder.createdAt)}</p>
+                    <p className="text-sm font-medium text-black mt-2">Placed: {formatDate(selectedOrder.createdAt)}</p>
                   </div>
                   <div className="flex flex-col items-end gap-2 flex-shrink-0">
                     <SolidStatusBadge status={selectedOrder.status} deliveryType={selectedOrder.deliveryType} />
@@ -3486,8 +3509,8 @@ export default function Orders() {
                       <p className="font-bold text-black capitalize">{selectedOrder.deliveryType ?? "—"}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-bold tracking-wider text-black mb-1">DATE</p>
-                      <p className="font-bold text-black">{formatDate(selectedOrder.createdAt)}</p>
+                      <p className="text-xs font-bold tracking-wider text-black mb-1">DELIVERY DATE</p>
+                      <p className="font-bold text-black">{formatDeliveryDate(selectedOrder.deliveryDate) || formatDate(selectedOrder.createdAt)}</p>
                     </div>
                     {selectedOrder.timeslotLabel && (
                       <div className="col-span-2">
