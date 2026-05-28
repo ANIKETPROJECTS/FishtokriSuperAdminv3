@@ -946,7 +946,7 @@ router.post("/timeslots", async (req, res) => {
   try {
     const ctx = await getSubHubDb(req.params.id, res, req as ScopedRequest);
     if (!ctx) return;
-    const { label, startTime, endTime, isInstant, extraCharge, isActive, sortOrder } = req.body;
+    const { label, startTime, endTime, isInstant, extraCharge, isActive, sortOrder, orderLimit } = req.body;
     if (!startTime || !endTime) { res.status(400).json({ error: "ValidationError", message: "Start time and end time are required" }); return; }
     const resolvedLabel = label && String(label).trim() ? String(label).trim() : `${startTime} - ${endTime}`;
     const doc = {
@@ -957,6 +957,8 @@ router.post("/timeslots", async (req, res) => {
       extraCharge: Number(extraCharge) || 0,
       isActive: isActive !== false,
       sortOrder: Number(sortOrder) || 0,
+      orderLimit: Number(orderLimit) || 0,
+      limitedByOrders: false,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -993,15 +995,20 @@ router.put("/timeslots/:timeslotId", async (req, res) => {
     if (!ctx) return;
     const oid = toId(req.params.timeslotId);
     if (!oid) { res.status(400).json({ error: "InvalidId", message: "Invalid timeslot ID" }); return; }
-    const { label, startTime, endTime, isInstant, extraCharge, isActive, sortOrder } = req.body;
+    const { label, startTime, endTime, isInstant, extraCharge, isActive, sortOrder, orderLimit } = req.body;
     const update: any = { updatedAt: new Date() };
     if (label !== undefined) update.label = label;
     if (startTime !== undefined) update.startTime = startTime;
     if (endTime !== undefined) update.endTime = endTime;
     if (isInstant !== undefined) update.isInstant = isInstant === true;
     if (extraCharge !== undefined) update.extraCharge = Number(extraCharge) || 0;
-    if (isActive !== undefined) update.isActive = isActive;
+    if (isActive !== undefined) {
+      update.isActive = isActive;
+      // If admin manually changes isActive, clear the auto-limit flag
+      update.limitedByOrders = false;
+    }
     if (sortOrder !== undefined) update.sortOrder = Number(sortOrder) || 0;
+    if (orderLimit !== undefined) update.orderLimit = Number(orderLimit) || 0;
     const result = await ctx.conn.db.collection("timeslots").findOneAndUpdate({ _id: oid }, { $set: update }, { returnDocument: "after" });
     if (!result) { res.status(404).json({ error: "NotFound", message: "Timeslot not found" }); return; }
     res.json({ timeslot: result });
@@ -1149,7 +1156,9 @@ router.post("/timeslots/bulk-upsert", async (req, res) => {
           isInstant: String(row.isInstant ?? "no").toLowerCase() === "yes",
           extraCharge: Number(row.extraCharge) || 0,
           isActive: String(row.isActive ?? "yes").toLowerCase() !== "no",
-          sortOrder: Number(row.sortOrder) || 0, updatedAt: new Date(),
+          sortOrder: Number(row.sortOrder) || 0,
+          orderLimit: Number(row.orderLimit) || 0,
+          updatedAt: new Date(),
         };
         if (!fields.label || !fields.startTime || !fields.endTime) { errors.push("Skipped: missing label/startTime/endTime"); continue; }
         const oid = row._id ? toId(String(row._id)) : null;

@@ -3895,8 +3895,9 @@ function TimeSlotsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: 
                           <p className="font-semibold text-[#162B4D] text-sm">{displayTime(s.startTime)} – {displayTime(s.endTime)}</p>
                           {s.isInstant && <span className="text-[10px] bg-orange-50 text-orange-600 font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">Instant</span>}
                           <StatusBadge active={s.isActive !== false} />
+                          {s.limitedByOrders && <span className="text-[10px] bg-red-50 text-red-600 font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">Limit Reached</span>}
                         </div>
-                        <p className="text-xs text-gray-400">{displayTime(s.startTime)} – {displayTime(s.endTime)}{s.extraCharge > 0 ? ` · +₹${s.extraCharge} extra` : ""}</p>
+                        <p className="text-xs text-gray-400">{displayTime(s.startTime)} – {displayTime(s.endTime)}{s.extraCharge > 0 ? ` · +₹${s.extraCharge} extra` : ""}{(s.orderLimit ?? 0) > 0 ? ` · Limit: ${s.orderLimit} orders` : ""}</p>
                       </div>
                       <span className="text-xs font-bold text-gray-400">#{s.sortOrder ?? 0}</span>
                       <ActionButtons onEdit={() => { setEditing(s); setModalOpen(true); }} onDelete={() => setDeleteId(String(s._id))} />
@@ -3919,8 +3920,9 @@ function TimeSlotsTab({ subHubId, onSetExcel }: { subHubId: string; onSetExcel: 
                   <p className="font-semibold text-[#162B4D] text-sm">{displayTime(s.startTime)} – {displayTime(s.endTime)}</p>
                   {s.isInstant && <span className="text-[10px] bg-orange-50 text-orange-600 font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">Instant</span>}
                   <StatusBadge active={s.isActive !== false} />
+                  {s.limitedByOrders && <span className="text-[10px] bg-red-50 text-red-600 font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">Limit Reached</span>}
                 </div>
-                <p className="text-xs text-gray-400">{displayTime(s.startTime)} – {displayTime(s.endTime)}{s.extraCharge > 0 ? ` · +₹${s.extraCharge} extra` : ""}</p>
+                <p className="text-xs text-gray-400">{displayTime(s.startTime)} – {displayTime(s.endTime)}{s.extraCharge > 0 ? ` · +₹${s.extraCharge} extra` : ""}{(s.orderLimit ?? 0) > 0 ? ` · Limit: ${s.orderLimit} orders` : ""}</p>
               </div>
               <span className="text-xs text-gray-300 font-mono hidden sm:block">#{s.sortOrder ?? 0}</span>
               <ActionButtons onEdit={() => { setEditing(s); setModalOpen(true); }} onDelete={() => setDeleteId(String(s._id))} />
@@ -4130,6 +4132,7 @@ function TimeslotModal({ isOpen, onClose, timeslot, subHubId, onSaved, nextOrder
   const [endTime, setEndTime] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [sortOrder, setSortOrder] = useState("1");
+  const [orderLimit, setOrderLimit] = useState("0");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -4137,9 +4140,11 @@ function TimeslotModal({ isOpen, onClose, timeslot, subHubId, onSaved, nextOrder
       if (timeslot) {
         setStartTime(timeslot.startTime ? displayTime(timeslot.startTime) : "");
         setEndTime(timeslot.endTime ? displayTime(timeslot.endTime) : "");
-        setIsActive(timeslot.isActive !== false); setSortOrder(String(timeslot.sortOrder ?? 0));
+        setIsActive(timeslot.isActive !== false);
+        setSortOrder(String(timeslot.sortOrder ?? 0));
+        setOrderLimit(String(timeslot.orderLimit ?? 0));
       } else {
-        setStartTime(""); setEndTime(""); setIsActive(true); setSortOrder(String(nextOrder));
+        setStartTime(""); setEndTime(""); setIsActive(true); setSortOrder(String(nextOrder)); setOrderLimit("0");
       }
     }
   }, [isOpen, timeslot, nextOrder]);
@@ -4151,7 +4156,7 @@ function TimeslotModal({ isOpen, onClose, timeslot, subHubId, onSaved, nextOrder
     const dup = allItems.some((x: any) => (x.sortOrder ?? 0) === soNum && String(x._id) !== String(timeslot?._id));
     if (dup) { toast({ title: "Duplicate order number", description: `Sort order ${soNum} is already used by another time slot.`, variant: "destructive" }); setSaving(false); return; }
     const label = `${startTime} - ${endTime}`;
-    const payload = { startTime, endTime, label, isActive, sortOrder: soNum };
+    const payload = { startTime, endTime, label, isActive, sortOrder: soNum, orderLimit: Number(orderLimit) || 0 };
     try {
       if (isEditing) { await apiFetch(`/api/sub-hubs/${subHubId}/menu/timeslots/${timeslot._id}`, { method: "PUT", body: JSON.stringify(payload) }); toast({ title: "Time slot updated" }); }
       else { await apiFetch(`/api/sub-hubs/${subHubId}/menu/timeslots`, { method: "POST", body: JSON.stringify(payload) }); toast({ title: "Time slot added" }); }
@@ -4172,6 +4177,18 @@ function TimeslotModal({ isOpen, onClose, timeslot, subHubId, onSaved, nextOrder
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label className="text-xs font-semibold text-gray-600">Sort Order</Label><Input type="number" min="0" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="h-9" /></div>
             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"><Label className="text-sm">Active</Label><Switch checked={isActive} onCheckedChange={setIsActive} className="data-[state=checked]:bg-[#1A56DB]" /></div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-gray-600">Order Limit</Label>
+            <Input
+              type="number"
+              min="0"
+              value={orderLimit}
+              onChange={(e) => setOrderLimit(e.target.value)}
+              className="h-9"
+              placeholder="0"
+            />
+            <p className="text-[11px] text-gray-400">Set to 0 for no limit. When active (non-cancelled) orders for this slot reach the limit, it will automatically become inactive. It reactivates when orders drop below the limit.</p>
           </div>
           <DialogFooter className="pt-1"><Button type="button" variant="outline" onClick={onClose} className="h-9">Cancel</Button><Button type="submit" disabled={saving} className="bg-[#1A56DB] hover:bg-[#1447B4] h-9">{isEditing ? "Save Changes" : "Add Slot"}</Button></DialogFooter>
         </form>
