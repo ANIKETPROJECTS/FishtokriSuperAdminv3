@@ -1242,6 +1242,11 @@ export default function Orders() {
     [orderDeliveryType, deliveryPincode, pincodeEntry]
   );
 
+  // Auto-reset outstation toggle when pincode becomes serviceable or is cleared
+  useEffect(() => {
+    if (!isOutstationNeeded) setIsOutstationDelivery(false);
+  }, [isOutstationNeeded]);
+
   const newOrderTotal = useMemo(
     () => Math.max(0, itemsSubtotal - couponDiscount + slotExtraCharge + pincodeDeliveryCharge),
     [itemsSubtotal, couponDiscount, slotExtraCharge, pincodeDeliveryCharge]
@@ -3047,11 +3052,14 @@ export default function Orders() {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
+                        disabled={!isOutstationNeeded}
                         onClick={() => setIsOutstationDelivery((v) => !v)}
-                        className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-semibold border transition-all ${isOutstationDelivery ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-500 border-gray-300 hover:border-orange-400 hover:text-orange-500"}`}
+                        className={`flex items-center gap-1.5 text-[10px] font-semibold transition-all select-none ${!isOutstationNeeded ? "cursor-not-allowed opacity-40" : "cursor-pointer"}`}
                       >
-                        <span className={`w-3 h-3 rounded-full border-2 flex-shrink-0 transition-all ${isOutstationDelivery ? "bg-white border-white" : "border-gray-400"}`} />
-                        Outstation
+                        <span className={`relative inline-flex w-7 h-4 rounded-full transition-colors duration-200 ${isOutstationDelivery ? "bg-orange-500" : "bg-gray-300"}`}>
+                          <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 ${isOutstationDelivery ? "translate-x-3" : "translate-x-0"}`} />
+                        </span>
+                        <span className={isOutstationDelivery ? "text-orange-600" : "text-gray-400"}>Outstation</span>
                       </button>
                       {chosenCustomer && Array.isArray(chosenCustomer.addresses) && chosenCustomer.addresses.length > 0 && (
                         <div className="flex items-center gap-0.5 bg-gray-100 rounded-full p-0.5">
