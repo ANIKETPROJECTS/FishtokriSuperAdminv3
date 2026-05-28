@@ -604,6 +604,10 @@ export default function InventoryStockAdjustment() {
     } : r));
   }
 
+  function clearProduct(i: number) {
+    updateRow(i, { productId: "", productName: "", category: "", unit: "", quantityBefore: 0, search: "", batchNumber: "", selectedBatchId: "" });
+  }
+
   function onSearchChange(i: number, val: string) {
     updateRow(i, { search: val, productId: "", productName: "", category: "", unit: "", quantityBefore: 0, batchNumber: "", selectedBatchId: "" });
   }
