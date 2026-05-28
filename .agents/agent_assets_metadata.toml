@@ -17,3 +17,9 @@ id = "w-muzyQInFcQM4RxNMka_"
 uri = "file://prompt2.md"
 type = "text"
 title = "Wallet Payment Integration Prompt"
+
+[[outputs]]
+id = "0Vo8Z8oTByTZJ-6l4tk6Y"
+uri = "file://prompt3.md"
+type = "text"
+title = "Timeslot Order-Count Logic & Hiding Rules"
