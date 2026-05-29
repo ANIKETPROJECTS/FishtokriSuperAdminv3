@@ -87,34 +87,20 @@ Replace the three `REPLACE_WITH_YOUR_*` placeholders with your real values. Save
 
 ---
 
-## Step 4 — Install Dependencies
+## Step 4 — Install & Build
 
 ```bash
 cd /var/www/fishtokri
-pnpm install --frozen-lockfile
+npm install
+npm run build
 ```
 
-This resolves all workspace packages (`@workspace/*`) and `catalog:` version aliases. It runs automatically for all packages in the monorepo.
-
----
-
-## Step 5 — Build the Project
-
-Build the API (esbuild bundles everything into one file):
-```bash
-npm --prefix artifacts/api-server run build
-```
-
-Build the frontend (Vite outputs static files):
-```bash
-npm --prefix artifacts/fishtokri-admin run build
-```
-
-Both commands use standard `npm run build` — just pointed at each subfolder.
+`npm install` installs root tooling.  
+`npm run build` automatically runs `pnpm install` (resolves all workspace and `catalog:` deps) then builds both the API and the frontend.
 
 After this you will have:
 - `artifacts/api-server/dist/index.mjs` — the bundled API server
-- `artifacts/fishtokri-admin/dist/` — the built React static files
+- `artifacts/fishtokri-admin/dist/public/` — the built React static files
 
 ---
 
@@ -230,10 +216,9 @@ Certbot will automatically update your Nginx config for HTTPS. After this, acces
 ```bash
 cd /var/www/fishtokri
 git pull
-pnpm install --frozen-lockfile
-npm --prefix artifacts/api-server run build
-npm --prefix artifacts/fishtokri-admin run build
-pm2 restart fishtokri-api
+npm install
+npm run build
+pm2 restart fishtokri-api --update-env
 ```
 
 ### View live API logs
