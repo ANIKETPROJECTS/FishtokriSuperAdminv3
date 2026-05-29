@@ -1,0 +1,65 @@
+
+  dist/index.mjs                       5.5mb ⚠️
+  dist/pino-worker.mjs               153.4kb
+  dist/pino-file.mjs                 142.1kb
+  dist/pino-pretty.mjs               114.6kb
+  dist/thread-stream-worker.mjs        7.3kb
+  dist/index.mjs.map                  10.1mb
+  dist/pino-worker.mjs.map           256.9kb
+  dist/pino-file.mjs.map             229.0kb
+  dist/pino-pretty.mjs.map           203.9kb
+  dist/thread-stream-worker.mjs.map   12.0kb
+
+⚡ Done in 594ms
+root@srv1708834:/var/www/fishtokri# pm2 delete fishtokri-api
+pm2 start ecosystem.config.cjs
+pm2 save
+[PM2] Applying action deleteProcessId on app [fishtokri-api](ids: [ 0 ])
+[PM2] [fishtokri-api](0) ✓
+┌────┬───────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
+│ id │ name      │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
+└────┴───────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
+[PM2][WARN] Applications fishtokri-api not running, starting...
+[PM2] App [fishtokri-api] launched (1 instances)
+┌────┬──────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
+│ id │ name             │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
+├────┼──────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤
+│ 0  │ fishtokri-api    │ default     │ 0.0.0   │ cluster │ 24562    │ 0s     │ 0    │ online    │ 0%       │ 40.9mb   │ root     │ disabled │
+└────┴──────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
+[PM2] Saving current process list...
+[PM2] Successfully saved in /root/.pm2/dump.pm2
+root@srv1708834:/var/www/fishtokri# pm2 log 0
+[TAILING] Tailing last 15 lines for [0] process (change the value with --lines option)
+/root/.pm2/logs/fishtokri-api-error-0.log last 15 lines:
+/root/.pm2/logs/fishtokri-api-out-0.log last 15 lines:
+0|fishtokr | {"level":30,"time":1780036713895,"pid":24562,"hostname":"srv1708834","frontendDist":"/var/www/fishtokri/artifacts/fishtokri-admin/dist","msg":"Serving frontend static files"}
+0|fishtokr | {"level":30,"time":1780036714075,"pid":24562,"hostname":"srv1708834","msg":"Connected to MongoDB (fishtokri_admin)"}
+0|fishtokr | {"level":30,"time":1780036714080,"pid":24562,"hostname":"srv1708834","port":3015,"msg":"Server listening"}
+
+0|fishtokri-api  | {"level":30,"time":1780036726261,"pid":24562,"hostname":"srv1708834","req":{"id":1,"method":"GET","url":"/"},"res":{"statusCode":404},"responseTime":4,"msg":"request completed"}
+0|fishtokri-api  | Error: ENOENT: no such file or directory, stat '/var/www/fishtokri/artifacts/fishtokri-admin/dist/index.html'
+0|fishtokri-api  | {"level":30,"time":1780036727362,"pid":24562,"hostname":"srv1708834","req":{"id":2,"method":"GET","url":"/"},"res":{"statusCode":404},"responseTime":1,"msg":"request completed"}
+0|fishtokri-api  | Error: ENOENT: no such file or directory, stat '/var/www/fishtokri/artifacts/fishtokri-admin/dist/index.html'
+0|fishtokri-api  | {"level":30,"time":1780036728308,"pid":24562,"hostname":"srv1708834","req":{"id":3,"method":"GET","url":"/"},"res":{"statusCode":404},"responseTime":1,"msg":"request completed"}
+0|fishtokri-api  | Error: ENOENT: no such file or directory, stat '/var/www/fishtokri/artifacts/fishtokri-admin/dist/index.html'
+0|fishtokri-api  | {"level":30,"time":1780036729184,"pid":24562,"hostname":"srv1708834","dbName":"orders","msg":"Connected to sub hub DB"}
+0|fishtokri-api  | {"level":30,"time":1780036729203,"pid":24562,"hostname":"srv1708834","candidateCount":0,"undeductedCount":0,"statuses":[],"msg":"runInventoryBackgroundDeduction: scan complete"}
+0|fishtokri-api  | {"level":30,"time":1780036730828,"pid":24562,"hostname":"srv1708834","req":{"id":4,"method":"GET","url":"/"},"res":{"statusCode":404},"responseTime":1,"msg":"request completed"}
+0|fishtokri-api  | Error: ENOENT: no such file or directory, stat '/var/www/fishtokri/artifacts/fishtokri-admin/dist/index.html'
+0|fishtokri-api  | {"level":30,"time":1780036731048,"pid":24562,"hostname":"srv1708834","req":{"id":5,"method":"GET","url":"/"},"res":{"statusCode":404},"responseTime":0,"msg":"request completed"}
+0|fishtokri-api  | Error: ENOENT: no such file or directory, stat '/var/www/fishtokri/artifacts/fishtokri-admin/dist/index.html'
+0|fishtokri-api  | {"level":30,"time":1780036731252,"pid":24562,"hostname":"srv1708834","req":{"id":6,"method":"GET","url":"/"},"res":{"statusCode":404},"responseTime":1,"msg":"request completed"}
+0|fishtokri-api  | Error: ENOENT: no such file or directory, stat '/var/www/fishtokri/artifacts/fishtokri-admin/dist/index.html'
+0|fishtokri-api  | {"level":30,"time":1780036731464,"pid":24562,"hostname":"srv1708834","req":{"id":7,"method":"GET","url":"/"},"res":{"statusCode":404},"responseTime":1,"msg":"request completed"}
+0|fishtokri-api  | Error: ENOENT: no such file or directory, stat '/var/www/fishtokri/artifacts/fishtokri-admin/dist/index.html'
+0|fishtokri-api  | {"level":30,"time":1780036731609,"pid":24562,"hostname":"srv1708834","req":{"id":8,"method":"GET","url":"/"},"res":{"statusCode":404},"responseTime":2,"msg":"request completed"}
+0|fishtokri-api  | Error: ENOENT: no such file or directory, stat '/var/www/fishtokri/artifacts/fishtokri-admin/dist/index.html'
+0|fishtokri-api  | {"level":30,"time":1780036731817,"pid":24562,"hostname":"srv1708834","req":{"id":9,"method":"GET","url":"/"},"res":{"statusCode":404},"responseTime":1,"msg":"request completed"}
+0|fishtokri-api  | Error: ENOENT: no such file or directory, stat '/var/www/fishtokri/artifacts/fishtokri-admin/dist/index.html'
+0|fishtokri-api  | {"level":30,"time":1780036732024,"pid":24562,"hostname":"srv1708834","req":{"id":10,"method":"GET","url":"/"},"res":{"statusCode":404},"responseTime":1,"msg":"request completed"}
+0|fishtokri-api  | Error: ENOENT: no such file or directory, stat '/var/www/fishtokri/artifacts/fishtokri-admin/dist/index.html'
+0|fishtokri-api  | {"level":30,"time":1780036734012,"pid":24562,"hostname":"srv1708834","req":{"id":11,"method":"GET","url":"/"},"res":{"statusCode":404},"responseTime":1,"msg":"request completed"}
+0|fishtokri-api  | Error: ENOENT: no such file or directory, stat '/var/www/fishtokri/artifacts/fishtokri-admin/dist/index.html'
+0|fishtokri-api  | {"level":30,"time":1780036734200,"pid":24562,"hostname":"srv1708834","req":{"id":12,"method":"GET","url":"/"},"res":{"statusCode":404},"responseTime":1,"msg":"request completed"}
+0|fishtokri-api  | Error: ENOENT: no such file or directory, stat '/var/www/fishtokri/artifacts/fishtokri-admin/dist/index.html'
+
