@@ -389,12 +389,62 @@ export function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Footer */}
-        {expanded && (
-          <div className="px-5 py-3 border-t border-white/10">
-            <p className="text-[10px] text-white/30 text-center">FishTokri Admin System</p>
-          </div>
-        )}
+        {/* Settings Section */}
+        <div className={`border-t border-white/10 ${expanded ? "px-5 pt-4 pb-3" : "py-3"}`}>
+          {expanded && (
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-3">Settings</p>
+          )}
+
+          {/* User info card */}
+          {expanded ? (
+            <div className="flex items-center gap-3 mb-3 px-3 py-2.5 rounded-lg bg-white/5">
+              <div className="w-8 h-8 rounded-full bg-[#F05B4E]/20 border border-[#F05B4E]/30 flex items-center justify-center flex-shrink-0">
+                <UserCircle className="w-5 h-5 text-[#F05B4E]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white truncate leading-tight">{adminName}</p>
+                <p className="text-[10px] text-white/40 mt-0.5">{roleLabel}</p>
+                {admin?.email && (
+                  <p className="text-[10px] text-white/30 truncate">{admin.email}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-center mb-2">
+              <div
+                className="w-8 h-8 rounded-full bg-[#F05B4E]/20 border border-[#F05B4E]/30 flex items-center justify-center"
+                title={`${adminName} — ${roleLabel}`}
+              >
+                <UserCircle className="w-5 h-5 text-[#F05B4E]" />
+              </div>
+            </div>
+          )}
+
+          {/* Logout */}
+          {expanded ? (
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-white/60 hover:text-white hover:bg-red-500/15 hover:border-red-500/20 border border-transparent transition-colors"
+            >
+              <LogOut className="w-4 h-4 flex-shrink-0" />
+              <span>Logout</span>
+            </button>
+          ) : (
+            <div className="flex justify-center">
+              <button
+                onClick={handleLogout}
+                title="Logout"
+                className="p-2 rounded-lg text-white/50 hover:text-red-400 hover:bg-red-500/15 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {expanded && (
+            <p className="text-[10px] text-white/20 text-center mt-3">FishTokri Admin System</p>
+          )}
+        </div>
 
         {/* Desktop-only collapse/expand toggle at the bottom */}
         <button
