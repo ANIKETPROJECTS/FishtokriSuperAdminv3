@@ -280,6 +280,17 @@ function getTodayISODate(): string {
   return `${y}-${m}-${d}`;
 }
 
+/** Returns tomorrow's date in YYYY-MM-DD format (IST), matching the deliveryDate field. */
+function getTomorrowISODate(): string {
+  const now = new Date();
+  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  ist.setUTCDate(ist.getUTCDate() + 1);
+  const y = ist.getUTCFullYear();
+  const m = String(ist.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(ist.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 /**
  * Atomically generates the next sequential FishTokri order ID for today.
  * Format: #FTSYYYYMMDD{N}  e.g. #FTS202605261, #FTS202605262 …
@@ -448,17 +459,19 @@ router.get("/", async (req: ScopedRequest, res) => {
       if (to) filter.createdAt.$lte = new Date(to);
     }
 
-    // deliveryDateFilter: "today" = only today's orders (or no date set),
-    //                     "other" = orders scheduled for a different day
-    if (deliveryDateFilter === "today" || deliveryDateFilter === "other") {
+    // deliveryDateFilter: "today"    = today, past, or no date set (Current Orders)
+    //                     "tomorrow" = only tomorrow's date (Next Day Orders)
+    if (deliveryDateFilter === "today" || deliveryDateFilter === "tomorrow" || deliveryDateFilter === "other") {
       const todayISO = getTodayISODate();
+      const tomorrowISO = getTomorrowISODate();
       if (deliveryDateFilter === "today") {
+        // Current Orders: no date, empty, today, or any past date (deliveryDate <= today)
         const todayClause = {
           $or: [
-            { deliveryDate: todayISO },
             { deliveryDate: null },
             { deliveryDate: "" },
             { deliveryDate: { $exists: false } },
+            { deliveryDate: { $lte: todayISO } },
           ],
         };
         if (!filter.$and) filter.$and = [];
@@ -468,8 +481,8 @@ router.get("/", async (req: ScopedRequest, res) => {
         }
         filter.$and.push(todayClause);
       } else {
-        // "other": deliveryDate is set, non-null, non-empty, and not today
-        filter.deliveryDate = { $exists: true, $nin: [null, "", todayISO] };
+        // "tomorrow" / "other": exactly tomorrow's date only
+        filter.deliveryDate = tomorrowISO;
       }
     }
 
@@ -555,8 +568,11 @@ router.get("/stats", async (req: ScopedRequest, res) => {
     const currentTotal = ACTIVE.reduce((s, k) => s + (stats[k] ?? 0), 0);
     const historyTotal = HISTORY.reduce((s, k) => s + (stats[k] ?? 0), 0) + takeawayActive;
 
-    // Today / other-day counts for the new "Other Day Orders" tab
+    // Current / next-day counts for the tab badges
+    // Current Orders = today, past, or no date set
+    // Next Day Orders = exactly tomorrow's date
     const todayISO = getTodayISODate();
+    const tomorrowISO = getTomorrowISODate();
     const activeNonTakeaway = {
       ...scopeClause,
       status: { $in: ACTIVE },
@@ -566,15 +582,15 @@ router.get("/stats", async (req: ScopedRequest, res) => {
       conn.db.collection(COLLECTION).countDocuments({
         ...activeNonTakeaway,
         $or: [
-          { deliveryDate: todayISO },
           { deliveryDate: null },
           { deliveryDate: "" },
           { deliveryDate: { $exists: false } },
+          { deliveryDate: { $lte: todayISO } },
         ],
       }),
       conn.db.collection(COLLECTION).countDocuments({
         ...activeNonTakeaway,
-        deliveryDate: { $exists: true, $nin: [null, "", todayISO] },
+        deliveryDate: tomorrowISO,
       }),
     ]);
 

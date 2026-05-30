@@ -1649,7 +1649,7 @@ export default function Orders() {
         );
       }
       if (activeTab === "current") params.set("deliveryDateFilter", "today");
-      else if (activeTab === "otherday") params.set("deliveryDateFilter", "other");
+      else if (activeTab === "otherday") params.set("deliveryDateFilter", "tomorrow");
       if (statusFilter) {
         params.set("status", statusFilter);
       }
@@ -2130,7 +2130,7 @@ export default function Orders() {
   const totalOtherDay = statsTotals.otherDayTotal ?? 0;
   const TABS = [
     { key: "current" as const, label: "Current Orders", count: totalToday, icon: Clock, color: "text-blue-600" },
-    { key: "otherday" as const, label: "Other Day Orders", count: totalOtherDay, icon: Calendar, color: "text-orange-600" },
+    { key: "otherday" as const, label: "Next Day Orders", count: totalOtherDay, icon: Calendar, color: "text-orange-600" },
     { key: "history" as const, label: "History", count: totalHistory, icon: CheckCircle2, color: "text-green-600" },
     { key: "all" as const, label: "All Orders", count: totalAll, icon: ClipboardList, color: "text-gray-600" },
     { key: "invoices" as const, label: "Order Invoices", count: invoiceCount, icon: FileText, color: "text-violet-600" },
@@ -3810,13 +3810,13 @@ export default function Orders() {
                       const isTakeaway = selectedOrder.deliveryType === "takeaway";
                       const hasAssignee = !!selectedOrder.assignedDeliveryPersonId;
                       const requiresAssignee = (s: string) => !isTakeaway && !hasAssignee && (s === "out_for_delivery" || s === "delivered");
-                      // "Other day" orders (deliveryDate is a future date, not today) cannot
-                      // be dispatched or marked delivered until their delivery day arrives.
-                      const todayISO = getTodayIST();
+                      // "Next day" orders (deliveryDate is exactly tomorrow) cannot be
+                      // dispatched or marked delivered until the delivery day arrives.
+                      // Past-dated orders are treated as current and have no restriction.
                       const isOtherDay = !!(
                         selectedOrder.deliveryDate &&
                         selectedOrder.deliveryDate !== "" &&
-                        selectedOrder.deliveryDate > todayISO
+                        selectedOrder.deliveryDate === getTomorrowIST()
                       );
                       const otherDayBlocked = new Set(["out_for_delivery", "delivered"]);
                       const statusOptions = isTakeaway
