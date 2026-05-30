@@ -96,20 +96,46 @@ function generateBatchPrefix(productName: string): string {
   return (words[0].slice(0, 2) + words[1].slice(0, 2)).padEnd(4, "X");
 }
 
-function generateNextBatchNumber(productName: string, existingBatches: Batch[]): string {
+/** Returns today's date as YYYYMMDD in IST (UTC+5:30). */
+function getTodayYYYYMMDD(): string {
+  const now = new Date();
+  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  const y = ist.getUTCFullYear();
+  const m = String(ist.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(ist.getUTCDate()).padStart(2, "0");
+  return `${y}${m}${d}`;
+}
+
+/**
+ * Generates the next batch ID in the format: YYYYMMDD + ProductCode + GlobalSeq.
+ *
+ * The sequential number is a GLOBAL running counter across all products —
+ * it never resets per day. Each new batch increments it by 1 regardless of
+ * which product the batch belongs to.
+ *
+ * Examples:
+ *   First ever batch of "Bangda Curry Cut" on 30 May 2026 → 20260530BACU01
+ *   Next batch (any product) on 31 May 2026               → 20260531XXXX02
+ *   Another batch same day                                 → 20260531XXXX03
+ *
+ * @param productName  Name of the product (used to derive the 3-4 char code).
+ * @param allBatches   ALL batches from ALL products — used to find the global max.
+ */
+function generateNextBatchNumber(productName: string, allBatches: Batch[]): string {
   const prefix = generateBatchPrefix(productName);
+  const today = getTodayYYYYMMDD();
+  // Extract the trailing numeric part of every known batch number to find the global max.
   let maxNum = 0;
-  for (const b of existingBatches) {
+  for (const b of allBatches) {
     if (b.batchNumber) {
-      const bn = b.batchNumber.toUpperCase();
-      if (bn.startsWith(prefix)) {
-        const numStr = bn.slice(prefix.length);
-        const num = parseInt(numStr, 10);
-        if (!isNaN(num) && num > maxNum) maxNum = num;
+      const match = b.batchNumber.match(/(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
       }
     }
   }
-  return `${prefix}${String(maxNum + 1).padStart(2, "0")}`;
+  return `${today}${prefix}${String(maxNum + 1).padStart(2, "0")}`;
 }
 
 function emptyRow(): FormRow {
@@ -593,8 +619,10 @@ export default function InventoryStockAdjustment() {
   }
 
   function selectProduct(i: number, p: Product) {
-    const batches: Batch[] = p.batches ?? [];
-    const autoNum = generateNextBatchNumber(p.name, batches);
+    // Pass ALL batches from ALL loaded products so the global sequence counter
+    // correctly reflects every batch ever created, not just this product's batches.
+    const allBatches: Batch[] = products.flatMap((prod) => prod.batches ?? []);
+    const autoNum = generateNextBatchNumber(p.name, allBatches);
     setFormRows((rows) => rows.map((r, idx) => idx === i ? {
       ...r,
       productId: p.id, productName: p.name, category: p.category || "",
@@ -616,9 +644,9 @@ export default function InventoryStockAdjustment() {
     const row = formRows[i];
     let batchNumber = "";
     if (mode === "add" && row.productId) {
-      const prod = products.find((p) => p.id === row.productId);
-      const batches = prod?.batches ?? [];
-      batchNumber = generateNextBatchNumber(row.productName, batches);
+      // Use all batches from all products for the global sequential counter.
+      const allBatches: Batch[] = products.flatMap((prod) => prod.batches ?? []);
+      batchNumber = generateNextBatchNumber(row.productName, allBatches);
     }
     updateRow(i, { mode, batchNumber, selectedBatchId: "" });
   }
